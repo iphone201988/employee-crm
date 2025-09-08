@@ -1,0 +1,201 @@
+import Joi, { allow } from "joi";
+const addTeamMemberValidation = {
+  body: Joi.object({
+    name: Joi.string().required().messages({
+      "string.base": "Name must be a string",
+      "any.required": "Name is required",
+    }),
+    email: Joi.string().email().required().messages({
+      "string.base": "Email must be a string",
+      "string.email": "Invalid email format",
+      "any.required": "Email is required",
+    }),
+    departmentId: Joi.string().required().messages({
+      "string.base": "Department ID must be a string",
+      "any.required": "Department ID is required",
+    }),
+    workSchedule: Joi.object().optional().messages({
+      "object.base": "Work schedule must be a string",
+    }),
+    avatarUrl: Joi.string().allow(null).optional(),
+  }),
+};
+const updatePermissionValidation = {
+  body: Joi.object({
+    permissions: Joi.array().items(Joi.object({
+      userId: Joi.string().required().messages({
+        "string.base": "User ID must be a string",
+        "any.required": "User ID is required",
+      }),
+      approveTimesheets: Joi.boolean().optional().messages({
+        "boolean.base": "Approve timesheets must be a boolean",
+      }),
+      editServices: Joi.boolean().optional().messages({
+        "boolean.base": "Edit services must be a boolean",
+      }),
+      editJobBuilder: Joi.boolean().optional().messages({
+        "boolean.base": "Edit job builder must be a boolean",
+      }),
+      editJobTemplates: Joi.boolean().optional().messages({
+        "boolean.base": "Edit job templates must be a boolean",
+      }),
+    })).required().messages({
+      "array.base": "Permissions must be an array",
+      "any.required": "Permissions are required",
+    }),
+  })
+};
+const updateFeatureAccessValidation = {
+  body: Joi.object({
+    featureAccess: Joi.array().items(
+      Joi.object({
+        userId: Joi.string().required().messages({
+          "string.base": "User ID must be a string",
+          "any.required": "User ID is required",
+        }),
+        myTimesheet: Joi.boolean().optional().messages({
+          "boolean.base": "My timesheet must be a boolean",
+        }),
+        allTimesheets: Joi.boolean().optional().messages({
+          "boolean.base": "All timesheets must be a boolean",
+        }),
+        timeLogs: Joi.boolean().optional().messages({
+          "boolean.base": "Time logs must be a boolean",
+        }),
+        WIP: Joi.boolean().optional().messages({
+          "boolean.base": "WIP must be a boolean",
+        }),
+        agedWIP: Joi.boolean().optional().messages({
+          "boolean.base": "Aged WIP must be a boolean",
+        }),
+        invoices: Joi.boolean().optional().messages({
+          "boolean.base": "Invoices must be a boolean",
+        }),
+        agedDebtors: Joi.boolean().optional().messages({
+          "boolean.base": "Aged debtors must be a boolean",
+        }),
+        writeOff: Joi.boolean().optional().messages({
+          "boolean.base": "Write off must be a boolean",
+        }),
+        clientList: Joi.boolean().optional().messages({
+          "boolean.base": "Client list must be a boolean",
+        }),
+        clientBreakdown: Joi.boolean().optional().messages({
+          "boolean.base": "Client breakdown must be a boolean",
+        }),
+        services: Joi.boolean().optional().messages({
+          "boolean.base": "Services must be a boolean",
+        }),
+        jobTemplates: Joi.boolean().optional().messages({
+          "boolean.base": "Job templates must be a boolean",
+        }),
+        jobBuilder: Joi.boolean().optional().messages({
+          "boolean.base": "Job builder must be a boolean",
+        }),
+        jobList: Joi.boolean().optional().messages({
+          "boolean.base": "Job list must be a boolean",
+        }),
+        clientExpenses: Joi.boolean().optional().messages({
+          "boolean.base": "Client expenses must be a boolean",
+        }),
+        teamExpenses: Joi.boolean().optional().messages({
+          "boolean.base": "Team expenses must be a boolean",
+        }),
+        reports: Joi.boolean().optional().messages({
+          "boolean.base": "Reports must be a boolean",
+        }),
+        teamList: Joi.boolean().optional().messages({
+          "boolean.base": "Team list must be a boolean",
+        }),
+        rates: Joi.boolean().optional().messages({
+          "boolean.base": "Rates must be a boolean",
+        }),
+        permissions: Joi.boolean().optional().messages({
+          "boolean.base": "Permissions must be a boolean",
+        }),
+        access: Joi.boolean().optional().messages({
+          "boolean.base": "Access must be a boolean",
+        }),
+        general: Joi.boolean().optional().messages({
+          "boolean.base": "General must be a boolean",
+        }),
+        invoicing: Joi.boolean().optional().messages({
+          "boolean.base": "Invoicing must be a boolean",
+        }),
+        tags: Joi.boolean().optional().messages({
+          "boolean.base": "Tags must be a boolean",
+        }),
+        clientImport: Joi.boolean().optional().messages({
+          "boolean.base": "Client import must be a boolean",
+        }),
+        timeLogsImport: Joi.boolean().optional().messages({
+          "boolean.base": "Time logs import must be a boolean",
+        }),
+        integrations: Joi.boolean().optional().messages({
+          "boolean.base": "Integrations must be a boolean",
+        })
+      })).required().messages({
+        "array.base": "Feature access must be an array",
+        "any.required": "Feature access is required",
+      })
+  })
+};
+const sendInviteToTeamMemberValidation = {
+  body: Joi.object({
+    email: Joi.string().email().required().messages({
+      "string.base": "Email must be a string",
+      "string.email": "Invalid email format",
+      "any.required": "Email is required",
+    }),
+  })
+};
+const updateRatesValidation = {
+  body: Joi.object({
+    rates: Joi.array().items(
+      Joi.object({
+        userId: Joi.string().required().messages({
+          "string.base": "User ID must be a string",
+          "any.required": "User ID is required",
+        }),
+        hourlyRate: Joi.number().optional().messages({
+          "number.base": "Hourly rate must be a number",
+        }),
+        billableRate: Joi.number().optional().messages({
+          "number.base": "Billable rate must be a number",
+        }),
+        accounts: Joi.number().optional().messages({
+          "number.base": "Accounts must be a number",
+        }),
+        audits: Joi.number().optional().messages({
+          "number.base": "Audits must be a number",
+        }),
+        bookkeeping: Joi.number().optional().messages({
+          "number.base": "Bookkeeping must be a number",
+        }),
+        payroll: Joi.number().optional().messages({
+          "number.base": "Payroll must be a number",
+        }),
+        vat: Joi.number().optional().messages({
+          "number.base": "VAT must be a number",
+        }),
+        companySecretarial: Joi.number().optional().messages({
+          "number.base": "Company secretarial must be a number",
+        }),
+        cgt: Joi.number().optional().messages({
+          "number.base": "CGT must be a number",
+        }),
+      })).required().messages({
+        "array.base": "Rates must be an array",
+        "any.required": "Rates are required",
+      })
+  })
+};
+
+export default {
+  addTeamMemberValidation,
+  updatePermissionValidation,
+  updateFeatureAccessValidation,
+  sendInviteToTeamMemberValidation,
+  updateRatesValidation
+
+};
