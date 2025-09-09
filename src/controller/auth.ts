@@ -43,7 +43,7 @@ const profile = async (req: Request, res: Response, next: NextFunction): Promise
             { $match: { _id: user._id } },
             {
                 $lookup: {
-                    from: "departments",
+                    from: "departmentcategories",
                     localField: "departmentId",
                     foreignField: "_id",
                     as: "department",

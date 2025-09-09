@@ -68,7 +68,7 @@ const getAllTeamMembers = async (req: Request, res: Response, next: NextFunction
                             { $limit: limit },
                             {
                                 $lookup: {
-                                    from: "departments",
+                                    from: "departmentcategories",
                                     localField: "departmentId",
                                     foreignField: "_id",
                                     as: "department",
