@@ -11,5 +11,6 @@ userRouter.post("/add-team-member", authenticate, validate(userValidation.addTea
 userRouter.get("/get-all-team-members",authenticate, teamController.getAllTeamMembers);
 userRouter.post("/update-team-members", authenticate, validate(userValidation.updateTeamMembersValidation), teamController.updateTeamMembers);
 userRouter.post("/send-invite-to-team-member", authenticate, validate(userValidation.sendInviteToTeamMemberValidation), teamController.sendInviteToTeamMember);
+userRouter.post("/set-password",validate(userValidation.setPasswordValidation),  teamController.setPassword);
 
 export default userRouter;

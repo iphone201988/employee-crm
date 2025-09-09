@@ -1,6 +1,4 @@
 import { NextFunction, Request, Response } from "express";
-import { FeatureAccessModel } from "../models/FeatureAccess";
-import { PermissionModel } from "../models/Permission";
 import { UserModel } from "../models/User";
 import { LoginRequest } from "../types/request/types";
 import { BadRequestError } from "../utils/errors";

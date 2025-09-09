@@ -5,7 +5,7 @@ import { UserModel } from "../models/User";
 import { LoginRequest } from "../types/request/types";
 import { BadRequestError } from "../utils/errors";
 import { SUCCESS } from "../utils/response";
-import { comparePassword, findUserByEmail, generateOtp, signToken } from "../utils/utills";
+import { comparePassword, findUserByEmail, generateOtp, signToken, verifyToken } from "../utils/utills";
 import { sendEmail } from "../services/sendEmail";
 
 const uploadImage = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
@@ -177,14 +177,39 @@ const sendInviteToTeamMember = async (req: Request, res: Response, next: NextFun
             throw new BadRequestError("User does not exist");
         }
         const token = signToken({ id: user._id }, '10m');
-        const link = 'http://localhost:3000/invite/set-password?token=' + token;
+        const link = 'http://localhost:8080/set-password/?token=' + token;
         await sendEmail(email, 1, link);
+        user.passwordResetToken = token;
+        await user.save();
         SUCCESS(res, 200, "Invite sent successfully", { data: {} });
     } catch (error) {
         console.log("error in sendInviteToTeamMember", error);
         next(error);
     }
 };
+const setPassword = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { password,token } = req.body;
+        const decoded:any = verifyToken(token as string);
+        if (!decoded) {
+            throw new BadRequestError("Invalid token");
+        }
+        const user = await UserModel.findById(decoded?.id);
+        if (!user) {
+            throw new BadRequestError("User does not exist");
+        }
+        if (user?.passwordResetToken !== token) {
+            throw new BadRequestError("Invalid token");
+        }
+        user.password = password;
+        user.passwordResetToken = '';
+        await user.save();
+        SUCCESS(res, 200, "Password set successfully", { data: {} });
+    } catch (error) {
+        console.log("error in setPassword", error);
+        next(error);
+    }
+};
 
 
-export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember ,updateTeamMembers};
+export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember ,updateTeamMembers,setPassword};

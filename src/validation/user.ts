@@ -228,15 +228,31 @@ const updateTeamMembersValidation = {
       billableRate: Joi.number().optional().messages({
         "number.base": "Billable rate must be a number",
       }),
+      status: Joi.string().valid("active", "inactive", 'lock').optional().messages({
+        "string.base": "Status must be a string",
+      })
+
 
     })
 
   })
 }
-
+const setPasswordValidation = {
+  body: Joi.object({
+    password: Joi.string().required().messages({
+      "string.base": "Password must be a string",
+      "any.required": "Password is required",
+    }),
+    token: Joi.string().required().messages({
+      "string.base": "Token must be a string",
+      "any.required": "Token is required",
+    })
+  }),
+}
 export default {
   addTeamMemberValidation,
   sendInviteToTeamMemberValidation,
-  updateTeamMembersValidation
+  updateTeamMembersValidation,
+  setPasswordValidation
 
 };

@@ -53,6 +53,7 @@ export interface IUser extends Document {
     deviceType: string;
     createdAt: Date;
     updatedAt: Date;
+    passwordResetToken: string;
 }
 
 const userSchema = new Schema<IUser>({
@@ -131,7 +132,8 @@ const userSchema = new Schema<IUser>({
     },
     jti: String,
     deviceToken: String,
-    deviceType: Number
+    deviceType: Number,
+    passwordResetToken: String,
 }, {
     timestamps: true,
 });
