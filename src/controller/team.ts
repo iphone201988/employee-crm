@@ -5,7 +5,7 @@ import { UserModel } from "../models/User";
 import { LoginRequest } from "../types/request/types";
 import { BadRequestError } from "../utils/errors";
 import { SUCCESS } from "../utils/response";
-import { comparePassword, findUserByEmail, generateOtp, signToken, verifyToken } from "../utils/utills";
+import { comparePassword, findUserByEmail, generateOtp, hashPassword, signToken, verifyToken } from "../utils/utills";
 import { sendEmail } from "../services/sendEmail";
 
 const uploadImage = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
@@ -201,7 +201,7 @@ const setPassword = async (req: Request, res: Response, next: NextFunction): Pro
         if (user?.passwordResetToken !== token) {
             throw new BadRequestError("Invalid token");
         }
-        user.password = password;
+        user.password = await hashPassword(password);
         user.passwordResetToken = '';
         await user.save();
         SUCCESS(res, 200, "Password set successfully", { data: {} });
