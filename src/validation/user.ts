@@ -26,32 +26,17 @@ const addTeamMemberValidation = {
     }),
   }),
 };
-const updatePermissionValidation = {
+
+const sendInviteToTeamMemberValidation = {
   body: Joi.object({
-    permissions: Joi.array().items(Joi.object({
-      userId: Joi.string().required().messages({
-        "string.base": "User ID must be a string",
-        "any.required": "User ID is required",
-      }),
-      approveTimesheets: Joi.boolean().optional().messages({
-        "boolean.base": "Approve timesheets must be a boolean",
-      }),
-      editServices: Joi.boolean().optional().messages({
-        "boolean.base": "Edit services must be a boolean",
-      }),
-      editJobBuilder: Joi.boolean().optional().messages({
-        "boolean.base": "Edit job builder must be a boolean",
-      }),
-      editJobTemplates: Joi.boolean().optional().messages({
-        "boolean.base": "Edit job templates must be a boolean",
-      }),
-    })).required().messages({
-      "array.base": "Permissions must be an array",
-      "any.required": "Permissions are required",
+    email: Joi.string().email().required().messages({
+      "string.base": "Email must be a string",
+      "string.email": "Invalid email format",
+      "any.required": "Email is required",
     }),
   })
 };
-const updateFeatureAccessValidation = {
+const updateTeamMembersValidation = {
   body: Joi.object({
     featureAccess: Joi.array().items(
       Joi.object({
@@ -140,23 +125,7 @@ const updateFeatureAccessValidation = {
         integrations: Joi.boolean().optional().messages({
           "boolean.base": "Integrations must be a boolean",
         })
-      })).required().messages({
-        "array.base": "Feature access must be an array",
-        "any.required": "Feature access is required",
-      })
-  })
-};
-const sendInviteToTeamMemberValidation = {
-  body: Joi.object({
-    email: Joi.string().email().required().messages({
-      "string.base": "Email must be a string",
-      "string.email": "Invalid email format",
-      "any.required": "Email is required",
-    }),
-  })
-};
-const updateRatesValidation = {
-  body: Joi.object({
+      })),
     rates: Joi.array().items(
       Joi.object({
         userId: Joi.string().required().messages({
@@ -190,18 +159,84 @@ const updateRatesValidation = {
         cgt: Joi.number().optional().messages({
           "number.base": "CGT must be a number",
         }),
-      })).required().messages({
-        "array.base": "Rates must be an array",
-        "any.required": "Rates are required",
+      })),
+    permissions: Joi.array().items(Joi.object({
+      userId: Joi.string().required().messages({
+        "string.base": "User ID must be a string",
+        "any.required": "User ID is required",
+      }),
+      approveTimesheets: Joi.boolean().optional().messages({
+        "boolean.base": "Approve timesheets must be a boolean",
+      }),
+      editServices: Joi.boolean().optional().messages({
+        "boolean.base": "Edit services must be a boolean",
+      }),
+      editJobBuilder: Joi.boolean().optional().messages({
+        "boolean.base": "Edit job builder must be a boolean",
+      }),
+      editJobTemplates: Joi.boolean().optional().messages({
+        "boolean.base": "Edit job templates must be a boolean",
+      }),
+    })),
+    blukWeeklyHours: Joi.array().items(Joi.object({
+      userId: Joi.string().required().messages({
+        "string.base": "User ID must be a string",
+        "any.required": "User ID is required",
+      }),
+      workSchedule: Joi.object({
+        monday: Joi.number().min(0).optional(),
+        tuesday: Joi.number().min(0).optional(),
+        wednesday: Joi.number().min(0).optional(),
+        thursday: Joi.number().min(0).optional(),
+        friday: Joi.number().min(0).optional(),
+        saturday: Joi.number().min(0).optional(),
+        sunday: Joi.number().min(0).optional(),
       })
+        .optional()
+        .messages({
+          "object.base": "Work schedule must be an object",
+        }),
+    })),
+    singleTeamMenber: Joi.object({
+      userId: Joi.string().required().messages({
+        "string.base": "User ID must be a string",
+        "any.required": "User ID is required",
+      }),
+      workSchedule: Joi.object({
+        monday: Joi.number().min(0).optional(),
+        tuesday: Joi.number().min(0).optional(),
+        wednesday: Joi.number().min(0).optional(),
+        thursday: Joi.number().min(0).optional(),
+        friday: Joi.number().min(0).optional(),
+        saturday: Joi.number().min(0).optional(),
+        sunday: Joi.number().min(0).optional(),
+      })
+        .optional()
+        .messages({
+          "object.base": "Work schedule must be an object",
+        }),
+      name: Joi.string().optional().messages({
+        "string.base": "Name must be a string",
+      }),
+      departmentId: Joi.string().optional().messages({
+        "string.base": "Department ID must be a string",
+      }),
+      avatarUrl: Joi.string().allow(null).optional(),
+      hourlyRate: Joi.number().optional().messages({
+        "number.base": "Hourly rate must be a number",
+      }),
+      billableRate: Joi.number().optional().messages({
+        "number.base": "Billable rate must be a number",
+      }),
+
+    })
+
   })
-};
+}
 
 export default {
   addTeamMemberValidation,
-  updatePermissionValidation,
-  updateFeatureAccessValidation,
   sendInviteToTeamMemberValidation,
-  updateRatesValidation
+  updateTeamMembersValidation
 
 };

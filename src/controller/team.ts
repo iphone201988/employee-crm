@@ -129,44 +129,44 @@ const getAllTeamMembers = async (req: Request, res: Response, next: NextFunction
         next(error);
     }
 };
-const updatePermission = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+const updateTeamMembers = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        const { permissions } = req.body
-        for (const permission of permissions) {
-            const { userId, ...rest } = permission
-            await PermissionModel.findOneAndUpdate({ userId: userId }, { ...rest }, { upsert: true });
-        }
-        SUCCESS(res, 200, "Permissions updated successfully", { data: {} });
-    } catch (error) {
-        console.log("error in updatePermission", error);
-        next(error);
-    }
-};
-const updateFeatureAccess = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
-    try {
-        const { featureAccess } = req.body
-        for (const feature of featureAccess) {
-            const { userId, ...rest } = feature
-            await FeatureAccessModel.findOneAndUpdate({ userId: userId }, { ...rest }, { upsert: true });
-        }
-        SUCCESS(res, 200, "Feature access updated successfully", { data: {} });
-    } catch (error) {
-        console.log("error in updateFeatureAccess", error);
-        next(error);
-    }
-};
-const updateRates = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
-    try {
-        const { rates } = req.body
-        for (const rate of rates) {
-            const { userId, ...rest } = rate
-            await UserModel.findByIdAndUpdate(userId, { ...rest }, { upsert: true });
-        }
-        SUCCESS(res, 200, "Rates updated successfully", { data: {} });
+        const { permissions, rates, featureAccess, blukWeeklyHours, singleTeamMenber } = req.body
+        if (blukWeeklyHours?.length > 0) {
+            for (const week of blukWeeklyHours) {
+                const { userId, ...rest } = week
+                await UserModel.findByIdAndUpdate(userId, { ...rest }, );
 
+            }
+        }
+        if (permissions?.length > 0) {
+            for (const permission of permissions) {
+                const { userId, ...rest } = permission
+                await PermissionModel.findOneAndUpdate({ userId: userId }, { ...rest }, { upsert: true });
+            }
+
+        }
+        if (featureAccess?.length > 0) {
+            for (const feature of featureAccess) {
+                const { userId, ...rest } = feature
+                await FeatureAccessModel.findOneAndUpdate({ userId: userId }, { ...rest }, { upsert: true });
+            }
+        }
+        if (rates?.length > 0) {
+            for (const rate of rates) {
+                const { userId, ...rest } = rate
+                await UserModel.findByIdAndUpdate(userId, { ...rest }, { upsert: true });
+            }
+        }
+        if (singleTeamMenber?.userId) {
+            const { userId, ...rest } = singleTeamMenber
+            await UserModel.findByIdAndUpdate(userId, { ...rest }, { upsert: true });
+        } 
+        SUCCESS(res, 200, "Data updated successfully", { data: {} });
     } catch (error) {
-        console.log("error in updateRates", error);
+        console.log("error in bulkUpdateTeamMembers", error);
         next(error);
+
     }
 }
 const sendInviteToTeamMember = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
@@ -187,4 +187,4 @@ const sendInviteToTeamMember = async (req: Request, res: Response, next: NextFun
 };
 
 
-export default { uploadImage, addTeamMember, getAllTeamMembers, updatePermission, updateFeatureAccess, updateRates, sendInviteToTeamMember };
+export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember ,updateTeamMembers};
