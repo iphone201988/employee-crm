@@ -29,8 +29,8 @@ const ClientSchema: Schema = new Schema(
       trim: true,
     },
     businessTypeId: {
-      type: String,
-      required: true,
+        type: Schema.Types.ObjectId,
+        ref: 'BusinessCategory',
     },
     taxNumber: {
       type: String,
@@ -83,6 +83,10 @@ const ClientSchema: Schema = new Schema(
     audit: {
       type: Boolean,
       default: false,
+    },
+    status: {
+      type: String,
+      default: 'active',
     },
   },
   {

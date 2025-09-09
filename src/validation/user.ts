@@ -18,6 +18,12 @@ const addTeamMemberValidation = {
       "object.base": "Work schedule must be a string",
     }),
     avatarUrl: Joi.string().allow(null).optional(),
+    hourlyRate: Joi.number().optional().messages({
+      "number.base": "Hourly rate must be a number",
+    }),
+    billableRate: Joi.number().optional().messages({
+      "number.base": "Billable rate must be a number",
+    }),
   }),
 };
 const updatePermissionValidation = {

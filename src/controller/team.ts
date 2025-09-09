@@ -24,7 +24,7 @@ const uploadImage = async (req: Request, res: Response, next: NextFunction): Pro
 };
 const addTeamMember = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        const { name, email, departmentId, workSchedule, } = req.body;
+        const { name, email, departmentId, workSchedule, hourlyRate, billableRate, avatarUrl } = req.body;
         const user = await findUserByEmail(email);
         if (user) {
             throw new BadRequestError("Email already exists");
@@ -36,6 +36,9 @@ const addTeamMember = async (req: Request, res: Response, next: NextFunction): P
             departmentId,
             workSchedule,
             role: "team",
+            hourlyRate,
+            billableRate,
+            avatarUrl
         });
         await PermissionModel.create({
             userId: teamMember._id,

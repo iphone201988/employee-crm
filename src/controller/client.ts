@@ -15,11 +15,15 @@ const addClient = async (req: Request, res: Response, next: NextFunction): Promi
 };
 const getClients = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        let { page = 1, limit = 10 } = req.query;
+        let { page = 1, limit = 10 , search = ""} = req.query;
         page = parseInt(page as string);
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
-        const clients = await ClientModel.find({}).skip(skip).limit(limit);
+        const query:any = {};
+        if(search){
+            query.name = { $regex: '^'+ search, $options: 'i' };
+        }
+        const clients = await ClientModel.find(query).skip(skip).limit(limit).populate("businessTypeId");
         SUCCESS(res, 200, "Clients fetched successfully", { data: clients });
     } catch (error) {
         console.log("error in getClients", error);
