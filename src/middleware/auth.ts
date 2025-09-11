@@ -2,10 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/config';
 import { UserModel } from '../models/User';
-import { FeatureAccessModel } from '../models/FeatureAccess';
 
 export interface AuthenticatedRequest extends Request {
   user?: any;
+  userId?: any;
 }
 
 export const authenticate = async (
@@ -41,6 +41,7 @@ export const authenticate = async (
     
     
     req.user = user;
+    req.userId = user._id;
     
     next();
   } catch (error) {

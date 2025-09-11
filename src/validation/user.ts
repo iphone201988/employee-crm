@@ -228,7 +228,7 @@ const updateTeamMembersValidation = {
       billableRate: Joi.number().optional().messages({
         "number.base": "Billable rate must be a number",
       }),
-      status: Joi.string().valid("active", "inactive", 'lock').optional().messages({
+      status: Joi.string().valid("active", "inActive").optional().messages({
         "string.base": "Status must be a string",
       })
 

@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IClient extends Document {
   clientRef: string;
   clientName: string;
-  businessType: string;
+  businessTypeId: Schema.Types.ObjectId;
   taxNumber: string;
   croNumber?: string;
   address: string;
@@ -14,9 +14,13 @@ export interface IClient extends Document {
   phoneNote?: string;
   onboardedDate: Date;
   amlCompliant: boolean;
+  audit: boolean;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const ClientSchema: Schema = new Schema(
+const ClientSchema: Schema = new Schema<IClient>(
   {
     clientRef: {
       type: String,

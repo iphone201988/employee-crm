@@ -16,7 +16,7 @@ const addClient = async (req: Request, res: Response, next: NextFunction): Promi
 };
 const getClients = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        let { page = 1, limit = 10, search = "" , businessTypeId = "",} = req.query;
+        let { page = 1, limit = 10, search = "", businessTypeId = "", } = req.query;
         page = parseInt(page as string);
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
@@ -33,7 +33,7 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
         }
 
         // Filter by businessTypeId (ObjectId)
-        if (businessTypeId ) {
+        if (businessTypeId) {
             query.businessTypeId = businessTypeId;
         }
 
@@ -71,7 +71,7 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
             BusinessCategoryModel.find({}).select('name')
         ]);
 
-        const breakdownData: any = { totalClients };
+        let breakdownData: any = { totalClients };
 
         businessTypes.forEach(bt => {
             console.log(bt);
@@ -84,6 +84,10 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
             const key = item._id.replace(/\s+/g, '').toLowerCase();
             breakdownData[key] = item.count;
         });
+        breakdownData = Object.entries(breakdownData).map(([key, count]) => ({
+            name: key,
+            count
+        }));
 
         const totalPages = Math.ceil(totalClients / limit);
         const pagination = {

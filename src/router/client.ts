@@ -6,7 +6,7 @@ import { authenticate } from "../middleware/auth";
 
 const clientRouter = express.Router();
 
-clientRouter.post("/", authenticate, validate(clientValidation.addClientValidation), clientController.addClient);
-clientRouter.get("/", authenticate, clientController.getClients);
+clientRouter.post("/add", authenticate, validate(clientValidation.addClientValidation), clientController.addClient);
+clientRouter.get("/all", authenticate, clientController.getClients);
 
 export default clientRouter;

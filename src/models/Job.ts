@@ -13,9 +13,12 @@ export interface IJob extends Document {
     status: 'queued' | 'inProgress' | 'withClient' | 'forApproval' | 'completed' | 'cancelled';
     description: string;
     createdBy: mongoose.Types.ObjectId;
+    priority: 'high' | 'medium' | 'low' | 'urgent';
+    createdAt: Date;
+    updatedAt: Date;
 }
 
-const JobSchema: Schema = new Schema(
+const JobSchema: Schema = new Schema<IJob>(
     {
         name: {
             type: String,
@@ -92,6 +95,5 @@ JobSchema.index({ jobManagerId: 1 });
 JobSchema.index({ status: 1 });
 JobSchema.index({ startDate: 1, endDate: 1 });
 JobSchema.index({ teamMembers: 1 });
-JobSchema.index({ status: 1 });
 
 export const JobModel = mongoose.model<IJob>('Job', JobSchema);

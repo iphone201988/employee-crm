@@ -5,7 +5,7 @@ export interface IUser extends Document {
     name: string;
     email: string;
     password?: string;
-    status: 'active' | 'inactive' | 'pending';
+    status: 'active' | 'inActive' ;
     avatarUrl?: string;
     role: 'superadmin' | 'team';
     departmentId: mongoose.Types.ObjectId;
@@ -72,7 +72,7 @@ const userSchema = new Schema<IUser>({
     },
     status: {
         type: String,
-        enum: ['active', 'inactive', 'lock'],
+        enum: ['active', 'inActive', ],
         default: 'active',
     },
     avatarUrl: String,
