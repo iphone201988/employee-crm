@@ -13,6 +13,7 @@ import { JobCategoryModel } from "../models/JobCategory";
 import { TimeCategoryModel } from "../models/TimeCategory";
 import { BusinessCategoryModel } from "../models/BusinessCategory";
 import { ClientModel } from "../models/Client";
+import { JobModel } from "../models/Job";
 
 const uploadImage = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -35,7 +36,7 @@ const addTeamMember = async (req: Request, res: Response, next: NextFunction): P
         if (user) {
             throw new BadRequestError("Email already exists");
         }
-        const serviceFees = (await ServicesCategoryModel.find({})).map((service) => ({ serviceId: service._id, fee: 0 }));
+        const jobFees = (await JobCategoryModel.find({})).map((job) => ({ jobId: job._id, fee: 0 }));
         const teamMember = await UserModel.create({
             name,
             email,
@@ -45,7 +46,7 @@ const addTeamMember = async (req: Request, res: Response, next: NextFunction): P
             hourlyRate,
             billableRate,
             avatarUrl,
-            serviceFees
+            jobFees
         });
         await PermissionModel.create({
             userId: teamMember._id,
@@ -227,11 +228,11 @@ const setPassword = async (req: Request, res: Response, next: NextFunction): Pro
 
 const dropdownOptions = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        const { type = "all" } = req.query;
+        const { type = "all", clientId } = req.query;
         const data: any = {};
         if (type === "all") {
 
-            const [departments, services, jobs, times, bussiness, teams, clients] = await Promise.all(
+            const [departments, services, jobs, times, bussiness, teams, clients, jobList] = await Promise.all(
                 [
                     DepartmentCategoryModel.find({}, { _id: 1, name: 1, }).lean(),
                     ServicesCategoryModel.find({}, { _id: 1, name: 1, }).lean(),
@@ -240,6 +241,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
                     BusinessCategoryModel.find({}, { _id: 1, name: 1, }).lean(),
                     UserModel.find({ role: "team" }, { _id: 1, name: 1, }).lean(),
                     ClientModel.find({}, { _id: 1, name: 1, }).lean(),
+                    JobModel.find({}, { _id: 1, name: 1, }).lean(),
                 ]);
             data.departments = departments;
             data.services = services;
@@ -248,6 +250,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
             data.bussiness = bussiness;
             data.teams = teams;
             data.clients = clients;
+            data.jobList = jobList;
 
         } else if (type === "department") {
             data.departments = await DepartmentCategoryModel.find({}, { _id: 1, name: 1, }).lean();
@@ -263,6 +266,10 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
             data.teams = await UserModel.find({ role: "team" }, { _id: 1, name: 1, }).lean();
         } else if (type === "client") {
             data.clients = await ClientModel.find({}, { _id: 1, name: 1, }).lean();
+        } else if(type === "jobList"){
+            let query:any = { };
+            if(clientId) query.clientId = clientId;
+            data.jobs = await JobModel.find(query, { _id: 1, name: 1, }).lean();
         } else {
             throw new BadRequestError("Invalid type");
         }

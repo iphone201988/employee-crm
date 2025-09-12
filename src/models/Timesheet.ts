@@ -19,7 +19,7 @@ const timesheetSchema = new mongoose.Schema({
         required: true,
         default: "daft"
     },
-    rowData: [{
+    entries: [{
         clientId: {
             type: Schema.Types.ObjectId,
             ref: 'Client',
@@ -46,95 +46,72 @@ const timesheetSchema = new mongoose.Schema({
         rate: {
             type: Number,
         },
-        weeklyWorking:{
-            monday: {
-                type: Number,
-                default: 0
-            },
-            tuesday: {
-                type: Number,
-                default: 0
-            },
-            wednesday: {
-                type: Number,
-                default: 0
-            },
-            thursday: {
-                type: Number,
-                default: 0
-            },
-            friday: {
-                type: Number,
-                default: 0
-            },
-            saturday: {
-                type: Number,
-                default: 0
-            },
-            sunday: {
-                type: Number,
-                default: 0
-            },
-        }
+        dailyHours: {
+            monday: { type: Number, default: 0, min: 0, max: 24 },
+            tuesday: { type: Number, default: 0, min: 0, max: 24 },
+            wednesday: { type: Number, default: 0, min: 0, max: 24 },
+            thursday: { type: Number, default: 0, min: 0, max: 24 },
+            friday: { type: Number, default: 0, min: 0, max: 24 },
+            saturday: { type: Number, default: 0, min: 0, max: 24 },
+            sunday: { type: Number, default: 0, min: 0, max: 24 }
+        },
+        totalHours: { type: Number, default: 0 },
+        totalAmount: { type: Number, default: 0 },
     }],
-    billableHours:{
-        monday:{
-            type: Number,
-            default: 0
-        },
-        tuesday: {
-            type: Number,
-            default: 0
-        },
-        wednesday: {
-            type: Number,
-            default: 0
-        },
-        thursday: {
-            type: Number,
-            default: 0
-        },
-        friday: {
-            type: Number,
-            default: 0
-        },
-        saturday: {
-            type: Number,
-            default: 0
-        },
-        sunday: {
-            type: Number,
-            default: 0
-        },
+    billableHours: {
+        monday: { type: Number, default: 0 },
+        tuesday: { type: Number, default: 0 },
+        wednesday: { type: Number, default: 0 },
+        thursday: { type: Number, default: 0 },
+        friday: { type: Number, default: 0 },
+        saturday: { type: Number, default: 0 },
+        sunday: { type: Number, default: 0 },
+        total: { type: Number, default: 0 }
     },
+
     nonBillableHours: {
-        monday: {
-            type: Number,
-            default: 0
-        },
-        tuesday: {
-            type: Number,
-            default: 0
-        },
-        wednesday: {
-            type: Number,
-            default: 0
-        },
-        thursday: {
-            type: Number,
-            default: 0
-        },
-        friday: {
-            type: Number,
-            default: 0
-        },
-        saturday: {
-            type: Number,
-            default: 0
-        },
-        sunday: {
-            type: Number,
-            default: 0
-        },
-    }
-});
+        monday: { type: Number, default: 0 },
+        tuesday: { type: Number, default: 0 },
+        wednesday: { type: Number, default: 0 },
+        thursday: { type: Number, default: 0 },
+        friday: { type: Number, default: 0 },
+        saturday: { type: Number, default: 0 },
+        sunday: { type: Number, default: 0 },
+        total: { type: Number, default: 0 }
+    },
+
+    totalLoggedHours: {
+        monday: { type: Number, default: 0 },
+        tuesday: { type: Number, default: 0 },
+        wednesday: { type: Number, default: 0 },
+        thursday: { type: Number, default: 0 },
+        friday: { type: Number, default: 0 },
+        saturday: { type: Number, default: 0 },
+        sunday: { type: Number, default: 0 },
+        total: { type: Number, default: 0 }
+    },
+    variance: {
+        monday: { type: Number, default: 0 },
+        tuesday: { type: Number, default: 0 },
+        wednesday: { type: Number, default: 0 },
+        thursday: { type: Number, default: 0 },
+        friday: { type: Number, default: 0 },
+        saturday: { type: Number, default: 0 },
+        sunday: { type: Number, default: 0 },
+        total: { type: Number, default: 0 }
+    },
+    submittedAt: Date,
+    submittedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+
+    reviewedAt: Date,
+    reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+
+    approvedAt: Date,
+    approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+
+    rejectedAt: Date,
+    rejectedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    rejectionReason: String,
+}, { timestamps: true, });
+
+export const TimesheetModel = mongoose.model('Timesheet', timesheetSchema);
