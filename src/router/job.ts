@@ -8,5 +8,5 @@ const jobRouter = express.Router();
 
 jobRouter.post("/create", authenticate, validate(jobValidation.createJobValidation), jobController.createJob);
 jobRouter.get("/all", authenticate, jobController.getJobs);
-
+jobRouter.put("/update-job/:jobId", authenticate, validate(jobValidation.updateJobValidation), jobController.updateJob);
 export default jobRouter;

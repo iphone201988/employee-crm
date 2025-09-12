@@ -70,10 +70,7 @@ const getJobs = async (
         }
 
         if (search) {
-            query.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { description: { $regex: search, $options: 'i' } }
-            ];
+            query.name = { $regex: search, $options: 'i' } ;
         }
 
         // Date filtering based on view
@@ -409,6 +406,15 @@ const getJobs = async (
         next(error);
     }
 };
+const updateJob = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { jobId } = req.params;
+        await JobModel.findByIdAndUpdate(jobId, req.body, { new: true });
+        SUCCESS(res, 200, "Job updated successfully", { data: {} });
+    } catch (error) {
+        console.log("error in updateJob", error);
+        next(error);
+    }
+};
 
-
-export default { createJob, getJobs };
+export default { createJob, getJobs,updateJob };

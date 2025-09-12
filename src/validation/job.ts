@@ -1,4 +1,4 @@
-import Joi from "joi";  
+import Joi from "joi";
 const createJobValidation = {
     body: Joi.object({
         name: Joi.string().required().messages({
@@ -48,7 +48,29 @@ const createJobValidation = {
 
     }),
 };
+const updateJobValidation = {
+    params: Joi.object({
+        jobId: Joi.string().required().messages({
+            "string.base": "Job ID must be a string",
+            "any.required": "Job ID is required",
+        }),
+    }),
+    body: Joi.object({
+        name: Joi.string().optional(),
+        description: Joi.string().optional(),
+        clientId: Joi.string().optional(),
+        jobTypeId: Joi.string().optional(),
+        jobManagerId: Joi.string().optional(),
+        startDate: Joi.date().optional(),
+        endDate: Joi.date().optional(),
+        jobCost: Joi.number().optional(),
+        teamMembers: Joi.array().items(Joi.string()).optional(),
+        status: Joi.string().valid('queued', 'inProgress', 'withClient', 'forApproval', 'completed', 'cancelled').optional(),
+        priority: Joi.string().valid('high', 'medium', 'low', 'urgent').optional(),
+    }),
+}
 
 export default {
     createJobValidation,
+    updateJobValidation
 };

@@ -134,7 +134,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
         // Build dynamic projection with service toggles
         const projection: any = {
             clientRef: 1,
-            clientName: 1,
+            name: 1,
             businessTypeId: 1,
             businessType: { $arrayElemAt: ['$businessType.name', 0] },
             serviceDetails: {
