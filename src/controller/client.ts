@@ -125,7 +125,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
             query.businessTypeId = businessTypeId;
         }
         const allServices = await ServicesCategoryModel.find({}, 'name _id').lean();
-        const selectedServices = allServices.map(s => s._id.toString());
+        const selectedServices = allServices.map(s => s._id);
 
         // Build dynamic projection
         const projection: any = {
@@ -145,10 +145,10 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
             }
         };
 
-        selectedServices.forEach(service => {
-            const fieldName = service.toLowerCase().replace(/\s+/g, '');
-            projection[fieldName] = {
-                $in: [service, '$serviceDetails.name']
+        selectedServices.forEach((service:any) => {
+            // const fieldName = service;
+            projection[service] = {
+                $in: [service, '$serviceDetails._id']
             };
         });
 
