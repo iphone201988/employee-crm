@@ -138,27 +138,21 @@ const updateTeamMembersValidation = {
         billableRate: Joi.number().optional().messages({
           "number.base": "Billable rate must be a number",
         }),
-        accounts: Joi.number().optional().messages({
-          "number.base": "Accounts must be a number",
+        isLocked: Joi.boolean().optional().messages({
+          "boolean.base": "Is locked must be a boolean",
         }),
-        audits: Joi.number().optional().messages({
-          "number.base": "Audits must be a number",
-        }),
-        bookkeeping: Joi.number().optional().messages({
-          "number.base": "Bookkeeping must be a number",
-        }),
-        payroll: Joi.number().optional().messages({
-          "number.base": "Payroll must be a number",
-        }),
-        vat: Joi.number().optional().messages({
-          "number.base": "VAT must be a number",
-        }),
-        companySecretarial: Joi.number().optional().messages({
-          "number.base": "Company secretarial must be a number",
-        }),
-        cgt: Joi.number().optional().messages({
-          "number.base": "CGT must be a number",
-        }),
+        serviceFees:Joi.array().items(Joi.object({
+          serviceId: Joi.string().required().messages({
+            "string.base": "Service ID must be a string",
+            "any.required": "Service ID is required",
+          }),
+          fee: Joi.number().required().messages({
+            "number.base": "Fee must be a number",
+            "any.required": "Fee is required",
+          }),
+        })).optional().messages({
+          "array.base": "Service fees must be an array",
+        })
       })),
     permissions: Joi.array().items(Joi.object({
       userId: Joi.string().required().messages({
@@ -230,6 +224,21 @@ const updateTeamMembersValidation = {
       }),
       status: Joi.string().valid("active", "inActive").optional().messages({
         "string.base": "Status must be a string",
+      }),
+      isLocked: Joi.boolean().optional().messages({
+        "boolean.base": "Is locked must be a boolean",
+      }),
+      serviceFees:Joi.array().items(Joi.object({
+        serviceId: Joi.string().required().messages({
+          "string.base": "Service ID must be a string",
+          "any.required": "Service ID is required",
+        }),
+        fee: Joi.number().required().messages({
+          "number.base": "Fee must be a number",
+          "any.required": "Fee is required",
+        }),
+      })).optional().messages({
+        "array.base": "Service fees must be an array",
       })
 
 

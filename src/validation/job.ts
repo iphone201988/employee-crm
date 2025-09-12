@@ -29,13 +29,9 @@ const createJobValidation = {
             "date.base": "End date must be a date",
             "any.required": "End date is required",
         }),
-        estimatedCost: Joi.number().required().messages({
-            "number.base": "Estimated cost must be a number",
-            "any.required": "Estimated cost is required",
-        }),
-        actualCost: Joi.number().required().messages({
-            "number.base": "Actual cost must be a number",
-            "any.required": "Actual cost is required",
+        jobCost: Joi.number().required().messages({
+            "number.base": "Job cost must be a number",
+            "any.required": "Job cost is required",
         }),
         teamMembers: Joi.array().items(Joi.string()).required().messages({
             "array.base": "Team members must be an array",

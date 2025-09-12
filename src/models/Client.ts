@@ -16,6 +16,7 @@ export interface IClient extends Document {
   amlCompliant: boolean;
   audit: boolean;
   status: string;
+  services: Schema.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -92,6 +93,12 @@ const ClientSchema: Schema = new Schema<IClient>(
       type: String,
       default: 'active',
     },
+    services: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'servicesCategory',
+      },
+    ],
   },
   {
     timestamps: true,

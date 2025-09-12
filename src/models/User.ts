@@ -5,21 +5,14 @@ export interface IUser extends Document {
     name: string;
     email: string;
     password?: string;
-    status: 'active' | 'inActive' ;
+    status: 'active' | 'inActive';
     avatarUrl?: string;
     role: 'superadmin' | 'team';
     departmentId: mongoose.Types.ObjectId;
     hourlyRate: number;
     billableRate: number;
-    accounts: number;
-    audits: number;
-    bookkeeping: number;
-    payroll: number;
-    vat: number;
-    companySecretarial: number;
-    cgt: number;
     workSchedule: {
-        monday:{
+        monday: {
             type: Number,
             default: 0
         };
@@ -48,6 +41,11 @@ export interface IUser extends Document {
             default: 0
         };
     };
+    serviceFees: [{
+        serviceId: mongoose.Types.ObjectId;
+        fee: number;
+    }];
+    isLocked: boolean;
     jti: string;
     deviceToken: string;
     deviceType: string;
@@ -72,7 +70,7 @@ const userSchema = new Schema<IUser>({
     },
     status: {
         type: String,
-        enum: ['active', 'inActive', ],
+        enum: ['active', 'inActive',],
         default: 'active',
     },
     avatarUrl: String,
@@ -93,42 +91,32 @@ const userSchema = new Schema<IUser>({
         type: Number,
         default: 0,
     },
-    accounts: {
-        type: Number,
-        default: 0
+    isLocked: {
+        type: Boolean,
+        default: false,
     },
-    audits: {
-        type: Number,
-        default: 0
-    },
-    bookkeeping: {
-        type: Number,
-        default: 0
-    },
-    payroll: {
-        type: Number,
-        default: 0
-    },
-    vat: {
-        type: Number,
-        default: 0
-    },
-    companySecretarial: {
-        type: Number,
-        default: 0
-    },
-    cgt: {
-        type: Number,
-        default: 0
-    },
+    serviceFees: [
+        {
+            serviceId: {
+                type: Schema.Types.ObjectId,
+                ref: 'servicesCategory',
+                required: true
+            },
+            fee: {
+                type: Number,
+                default: 0,
+                min: 0
+            }
+        }
+    ],
     workSchedule: {
-        monday: { type: Number, default: 0,  },
-        tuesday: { type: Number, default: 0,  },
+        monday: { type: Number, default: 0, },
+        tuesday: { type: Number, default: 0, },
         wednesday: { type: Number, default: 0, },
         thursday: { type: Number, default: 0, },
-        friday: { type: Number, default: 0,},
+        friday: { type: Number, default: 0, },
         saturday: { type: Number, default: 0, },
-        sunday: { type: Number, default: 0,  }
+        sunday: { type: Number, default: 0, }
     },
     jti: String,
     deviceToken: String,

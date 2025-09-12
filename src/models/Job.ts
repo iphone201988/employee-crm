@@ -7,8 +7,7 @@ export interface IJob extends Document {
     jobManagerId: mongoose.Types.ObjectId;
     startDate: Date;
     endDate: Date;
-    estimatedCost: number;
-    actualCost: number;
+    jobCost: number;
     teamMembers: mongoose.Types.ObjectId[];
     status: 'queued' | 'inProgress' | 'withClient' | 'forApproval' | 'completed' | 'cancelled';
     description: string;
@@ -48,14 +47,9 @@ const JobSchema: Schema = new Schema<IJob>(
             type: Date,
             required: true,
         },
-        estimatedCost: {
+        jobCost: {
             type: Number,
             required: true,
-            min: 0,
-        },
-        actualCost: {
-            type: Number,
-            default: 0,
             min: 0,
         },
         teamMembers: [{

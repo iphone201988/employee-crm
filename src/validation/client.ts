@@ -40,7 +40,7 @@ const addClientValidation = {
             "string.base": "Phone must be a string",
             "any.required": "Phone is required",
         }),
-        phoneNote: Joi.string().optional().messages({
+        phoneNote: Joi.string().optional().allow("",null).messages({
             "string.base": "Phone note must be a string",
         }),
         onboardedDate: Joi.date().required().messages({
@@ -55,5 +55,21 @@ const addClientValidation = {
         }),
     }),
 };
+const updateClientServiceValidation = {
+    body: Joi.object({
+       clientServices: Joi.array().items(Joi.object({
+           clientId: Joi.string().required().messages({
+               "string.base": "Client ID must be a string",
+               "any.required": "Client ID is required",
+           }),
+           servicesTds: Joi.array().items(Joi.string()).required().messages({
+               "array.base": "Services TDS must be an array",
+               "any.required": "Services TDS is required",
+           })
+       })).messages({
+           "array.base": "Client services must be an array",
+       })
+    }),
+};
 
-export default {addClientValidation};
+export default {addClientValidation, updateClientServiceValidation};

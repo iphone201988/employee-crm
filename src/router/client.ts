@@ -8,5 +8,7 @@ const clientRouter = express.Router();
 
 clientRouter.post("/add", authenticate, validate(clientValidation.addClientValidation), clientController.addClient);
 clientRouter.get("/all", authenticate, clientController.getClients);
+clientRouter.get("/services", authenticate, clientController.getClientServices);
+clientRouter.put("/update-client-services", authenticate, validate(clientValidation.updateClientServiceValidation), clientController.updateClientService);
 
 export default clientRouter;

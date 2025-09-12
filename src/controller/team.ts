@@ -7,6 +7,7 @@ import { BadRequestError } from "../utils/errors";
 import { SUCCESS } from "../utils/response";
 import { comparePassword, findUserByEmail, generateOtp, hashPassword, signToken, verifyToken } from "../utils/utills";
 import { sendEmail } from "../services/sendEmail";
+import { ServicesCategoryModel } from "../models/ServicesCategory";
 
 const uploadImage = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -29,7 +30,7 @@ const addTeamMember = async (req: Request, res: Response, next: NextFunction): P
         if (user) {
             throw new BadRequestError("Email already exists");
         }
-
+        const serviceFees = (await ServicesCategoryModel.find({})).map((service) => ({ serviceId: service._id, fee: 0 }));
         const teamMember = await UserModel.create({
             name,
             email,
@@ -38,7 +39,8 @@ const addTeamMember = async (req: Request, res: Response, next: NextFunction): P
             role: "team",
             hourlyRate,
             billableRate,
-            avatarUrl
+            avatarUrl,
+            serviceFees
         });
         await PermissionModel.create({
             userId: teamMember._id,
