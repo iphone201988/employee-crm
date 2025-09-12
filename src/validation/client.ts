@@ -5,7 +5,7 @@ const addClientValidation = {
             "string.base": "Client ref must be a string",
             "any.required": "Client ref is required",
         }),
-        clientName: Joi.string().required().messages({
+        name: Joi.string().required().messages({
             "string.base": "Client name must be a string",
             "any.required": "Client name is required",
         }),

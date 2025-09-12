@@ -26,7 +26,7 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
 
         if (search) {
             query.$or = [
-                { clientName: { $regex: search, $options: 'i' } },
+                { name: { $regex: search, $options: 'i' } },
                 { clientRef: { $regex: search, $options: 'i' } },
             ];
         }
@@ -109,11 +109,13 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
 };
 const getClientServices = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        // Get all services with name and _id
-        let { page = 1, limit = 10, search = "", businessTypeId = "", } = req.query;
+        // Extract and parse query parameters
+        let { page = 1, limit = 10, search = "", businessTypeId = "" } = req.query;
         page = parseInt(page as string);
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
+
+        // Build search query
         const query: any = {};
         if (search) {
             query.$or = [
@@ -124,10 +126,12 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
         if (businessTypeId) {
             query.businessTypeId = businessTypeId;
         }
+
+        // Get all available services
         const allServices = await ServicesCategoryModel.find({}, 'name _id').lean();
         const selectedServices = allServices.map(s => s._id);
 
-        // Build dynamic projection
+        // Build dynamic projection with service toggles
         const projection: any = {
             clientRef: 1,
             clientName: 1,
@@ -145,97 +149,173 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
             }
         };
 
-        selectedServices.forEach((service:any) => {
-            // const fieldName = service;
-            projection[service] = {
+        // Add dynamic service toggle fields
+        selectedServices.forEach((service: any) => {
+            projection[service.toString()] = {
                 $in: [service, '$serviceDetails._id']
             };
         });
 
-        const clients = await ClientModel.aggregate([
-            { $match: query },
-            {
-                $lookup: {
-                    from: 'businesscategories',
-                    localField: 'businessTypeId',
-                    foreignField: '_id',
-                    as: 'businessType'
-                }
-            },
-            {
-                $lookup: {
-                    from: 'servicescategories',
-                    localField: 'services',
-                    foreignField: '_id',
-                    as: 'serviceDetails'
-                }
-            },
-            {
-                $project: projection
-            },
-            { $sort: { clientRef: 1 } }
-        ]);
+        // Also add service name-based toggles for easier frontend usage
+        allServices.forEach(service => {
+            const fieldName = service.name.toLowerCase().replace(/\s+/g, '');
+            projection[fieldName] = {
+                $in: [service.name, '$serviceDetails.name']
+            };
+        });
 
-        // Get actual service counts (only for assigned services)
-        const assignedServiceCounts = await ClientModel.aggregate([
-            { $unwind: '$services' },
+        // Execute aggregation with facet for multiple operations
+        const [result] = await ClientModel.aggregate([
             {
-                $group: {
-                    _id: '$services',
-                    count: { $sum: 1 }
+                $facet: {
+                    // Get total count for pagination
+                    total: [
+                        { $match: query }, 
+                        { $count: "count" }
+                    ],
+                    
+                    // Get paginated client data
+                    data: [
+                        { $match: query },
+                        { $sort: { clientName: 1 } },
+                        { $skip: skip },
+                        { $limit: limit },
+                        {
+                            $lookup: {
+                                from: 'businesscategories',
+                                localField: 'businessTypeId',
+                                foreignField: '_id',
+                                as: 'businessType'
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: 'servicescategories',
+                                localField: 'services',
+                                foreignField: '_id',
+                                as: 'serviceDetails'
+                            }
+                        },
+                        {
+                            $project: projection
+                        }
+                    ],
+                    
+                    // Service counts for filtered/searched clients
+                    filteredServiceCounts: [
+                        { $match: query },
+                        { $unwind: '$services' },
+                        {
+                            $group: {
+                                _id: '$services',
+                                count: { $sum: 1 }
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: 'servicescategories',
+                                localField: '_id',
+                                foreignField: '_id',
+                                as: 'serviceInfo'
+                            }
+                        },
+                        { $unwind: '$serviceInfo' },
+                        {
+                            $project: {
+                                serviceId: '$_id',
+                                serviceName: '$serviceInfo.name',
+                                count: 1,
+                                _id: 0
+                            }
+                        },
+                        { $sort: { count: -1 } }
+                    ],
+                    
+                    // Global service counts for all clients (for UI breakdown cards)
+                    globalServiceCounts: [
+                        { $unwind: '$services' },
+                        {
+                            $group: {
+                                _id: '$services',
+                                count: { $sum: 1 }
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: 'servicescategories',
+                                localField: '_id',
+                                foreignField: '_id',
+                                as: 'serviceInfo'
+                            }
+                        },
+                        { $unwind: '$serviceInfo' },
+                        {
+                            $project: {
+                                serviceId: '$_id',
+                                serviceName: '$serviceInfo.name',
+                                count: 1,
+                                _id: 0
+                            }
+                        },
+                        { $sort: { count: -1 } }
+                    ]
                 }
-            },
-            {
-                $lookup: {
-                    from: 'servicescategories',
-                    localField: '_id',
-                    foreignField: '_id',
-                    as: 'serviceInfo'
-                }
-            },
-            { $unwind: '$serviceInfo' },
-            {
-                $project: {
-                    serviceId: '$_id',
-                    serviceName: '$serviceInfo.name',
-                    count: 1,
-                    _id: 0
-                }
-            },
-            { $sort: { count: -1 } }
-        ]);
+            }
+        ]).allowDiskUse(true).exec();
 
-        // Create a map of assigned service counts
-        const countsMap = new Map();
-        assignedServiceCounts.forEach(s => {
-            countsMap.set(s.serviceId.toString(), s.count);
+        // Extract results from aggregation
+        const clients = result.data;
+        const totalClients = result.total[0]?.count || 0;
+        const filteredServiceCounts = result.filteredServiceCounts;
+        const globalServiceCounts = result.globalServiceCounts;
+
+        // Create maps for efficient lookup
+        const filteredCountsMap = new Map();
+        filteredServiceCounts.forEach((s: any) => {
+            filteredCountsMap.set(s.serviceId.toString(), s.count);
+        });
+
+        const globalCountsMap = new Map();
+        globalServiceCounts.forEach((s: any) => {
+            globalCountsMap.set(s.serviceId.toString(), s.count);
         });
 
         // Merge with all services to include zero counts
-        const completeServiceCounts = allServices.map(service => ({
+        const completeFilteredCounts = allServices.map(service => ({
             serviceId: service._id,
             serviceName: service.name,
-            count: countsMap.get(service._id.toString()) || 0
+            count: filteredCountsMap.get(service._id.toString()) || 0
         }));
 
-        const totalPages = Math.ceil(clients.length / limit);
+        const completeGlobalCounts = allServices.map(service => ({
+            serviceId: service._id,
+            serviceName: service.name,
+            count: globalCountsMap.get(service._id.toString()) || 0
+        }));
+
+        // Calculate pagination
+        const totalPages = Math.ceil(totalClients / limit);
         const pagination = {
             currentPage: page,
             totalPages,
-            totalClients: clients.length,
-            limit
-        }
+            totalClients,
+            limit,
+        };
 
+        // Send response
         SUCCESS(res, 200, "Clients fetched successfully", {
             data: clients,
             pagination,
-            breakdown: completeServiceCounts
+            breakdown: completeGlobalCounts, 
+            filteredCounts: completeFilteredCounts, 
         });
+
     } catch (error) {
         console.log("error in getClientServices", error);
         next(error);
     }
 };
+
 const updateClientService = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const { clientServices } = req.body;

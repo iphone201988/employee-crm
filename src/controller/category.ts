@@ -130,14 +130,14 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             const bussiness = await BusinessCategoryModel.find();
             SUCCESS(res, 200, "Categories fetched successfully", { data: { bussiness } });
             return;
-        } else {
-            const [departments, services, jobs, times, bussiness] = await Promise.all(
+        }  else {
+            const [departments, services, jobs, times, bussiness ] = await Promise.all(
                 [
                     DepartmentCategoryModel.find(),
                     ServicesCategoryModel.find(),
                     JobCategoryModel.find(),
                     TimeCategoryModel.find(),
-                    BusinessCategoryModel.find()
+                    BusinessCategoryModel.find(),
                 ]);
             SUCCESS(res, 200, "Categories fetched successfully", { data: { departments, services, jobs, times, bussiness } });
             return;

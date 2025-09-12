@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IClient extends Document {
   clientRef: string;
-  clientName: string;
+  name: string;
   businessTypeId: Schema.Types.ObjectId;
   taxNumber: string;
   croNumber?: string;
@@ -28,7 +28,7 @@ const ClientSchema: Schema = new Schema<IClient>(
       required: true,
       trim: true,
     },
-    clientName: {
+    name: {
       type: String,
       required: true,
       trim: true,

@@ -76,6 +76,7 @@ export const deleteImageFile = (imagePath: string): void => {
         console.error('Error while deleting image file:', err);
     }
 };
+export const ObjectId =(id:any) => new mongoose.Types.ObjectId(id);
 
 
 

@@ -5,9 +5,14 @@ import { UserModel } from "../models/User";
 import { LoginRequest } from "../types/request/types";
 import { BadRequestError } from "../utils/errors";
 import { SUCCESS } from "../utils/response";
-import { comparePassword, findUserByEmail, generateOtp, hashPassword, signToken, verifyToken } from "../utils/utills";
+import { comparePassword, findUserByEmail, generateOtp, hashPassword, ObjectId, signToken, verifyToken } from "../utils/utills";
 import { sendEmail } from "../services/sendEmail";
 import { ServicesCategoryModel } from "../models/ServicesCategory";
+import { DepartmentCategoryModel } from "../models/DepartmentCategory";
+import { JobCategoryModel } from "../models/JobCategory";
+import { TimeCategoryModel } from "../models/TimeCategory";
+import { BusinessCategoryModel } from "../models/BusinessCategory";
+import { ClientModel } from "../models/Client";
 
 const uploadImage = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -57,13 +62,20 @@ const addTeamMember = async (req: Request, res: Response, next: NextFunction): P
 };
 const getAllTeamMembers = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        let { page = 1, limit = 10 } = req.query;
+        let { page = 1, limit = 10, search = "", departmentId = "" } = req.query;
         page = parseInt(page as string);
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
+        const query: any = { role: "team" };
+        if (search) {
+            query.name= { $regex: search, $options: "i" }
+        }
+        if (departmentId) {
+            query.departmentId = ObjectId(departmentId);
+        }
         const result = await UserModel.aggregate(
             [
-                { $match: { role: "team" } },
+                { $match: query },
                 { $sort: { createdAt: -1 } },
                 {
                     $facet: {
@@ -137,7 +149,7 @@ const updateTeamMembers = async (req: Request, res: Response, next: NextFunction
         if (blukWeeklyHours?.length > 0) {
             for (const week of blukWeeklyHours) {
                 const { userId, ...rest } = week
-                await UserModel.findByIdAndUpdate(userId, { ...rest }, );
+                await UserModel.findByIdAndUpdate(userId, { ...rest },);
 
             }
         }
@@ -163,7 +175,7 @@ const updateTeamMembers = async (req: Request, res: Response, next: NextFunction
         if (singleTeamMenber?.userId) {
             const { userId, ...rest } = singleTeamMenber
             await UserModel.findByIdAndUpdate(userId, { ...rest }, { upsert: true });
-        } 
+        }
         SUCCESS(res, 200, "Data updated successfully", { data: {} });
     } catch (error) {
         console.log("error in bulkUpdateTeamMembers", error);
@@ -191,8 +203,8 @@ const sendInviteToTeamMember = async (req: Request, res: Response, next: NextFun
 };
 const setPassword = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        const { password,token } = req.body;
-        const decoded:any = verifyToken(token as string);
+        const { password, token } = req.body;
+        const decoded: any = verifyToken(token as string);
         if (!decoded) {
             throw new BadRequestError("Invalid token");
         }
@@ -213,5 +225,50 @@ const setPassword = async (req: Request, res: Response, next: NextFunction): Pro
     }
 };
 
+const dropdownOptions = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { type = "all" } = req.query;
+        const data: any = {};
+        if (type === "all") {
 
-export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember ,updateTeamMembers,setPassword};
+            const [departments, services, jobs, times, bussiness, teams, clients] = await Promise.all(
+                [
+                    DepartmentCategoryModel.find({}, { _id: 1, name: 1, }).lean(),
+                    ServicesCategoryModel.find({}, { _id: 1, name: 1, }).lean(),
+                    JobCategoryModel.find({}, { _id: 1, name: 1, }).lean(),
+                    TimeCategoryModel.find({}, { _id: 1, name: 1, }).lean(),
+                    BusinessCategoryModel.find({}, { _id: 1, name: 1, }).lean(),
+                    UserModel.find({ role: "team" }, { _id: 1, name: 1, }).lean(),
+                    ClientModel.find({}, { _id: 1, name: 1, }).lean(),
+                ]);
+            data.departments = departments;
+            data.services = services;
+            data.jobs = jobs;
+            data.times = times;
+            data.bussiness = bussiness;
+            data.teams = teams;
+            data.clients = clients;
+
+        } else if (type === "department") {
+            data.departments = await DepartmentCategoryModel.find({}, { _id: 1, name: 1, }).lean();
+        } else if (type === "service") {
+            data.services = await ServicesCategoryModel.find({}, { _id: 1, name: 1, }).lean();
+        } else if (type === "job") {
+            data.jobs = await JobCategoryModel.find({}, { _id: 1, name: 1, }).lean();
+        } else if (type === "time") {
+            data.times = await TimeCategoryModel.find({}, { _id: 1, name: 1, }).lean();
+        } else if (type === "bussiness") {
+            data.bussiness = await BusinessCategoryModel.find({}, { _id: 1, name: 1, }).lean();
+        } else if (type === "team") {
+            data.teams = await UserModel.find({ role: "team" }, { _id: 1, name: 1, }).lean();
+        } else if (type === "client") {
+            data.clients = await ClientModel.find({}, { _id: 1, name: 1, }).lean();
+        } else {
+            throw new BadRequestError("Invalid type");
+        }
+        SUCCESS(res, 200, "fetched successfully", { data });
+    } catch (error) {
+        next(error);
+    }
+};
+export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions };

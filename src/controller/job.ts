@@ -109,7 +109,7 @@ const getJobs = async (
                     .sort(sortObj)
                     .skip(skip)
                     .limit(limitNum)
-                    .populate('clientId', 'clientName email')
+                    .populate('clientId', 'name email')
                     .populate('jobTypeId', 'name description')
                     .populate('jobManagerId', 'name email department')
                     .populate('teamMembers', 'name email department')
