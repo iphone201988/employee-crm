@@ -35,7 +35,7 @@ const timesheetSchema = new mongoose.Schema({
             ref: 'TimeCategory',
             required: true,
         },
-        decsription: {
+        description: {
             type: String,
         },
         isbillable: {

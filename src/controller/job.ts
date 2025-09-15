@@ -416,5 +416,15 @@ const updateJob = async (req: Request, res: Response, next: NextFunction): Promi
         next(error);
     }
 };
+const deleteJob = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { jobId } = req.params;
+        await JobModel.findByIdAndDelete(jobId);
+        SUCCESS(res, 200, "Job deleted successfully", { data: {} });
+    } catch (error) {
+        console.log("error in deleteJob", error);
+        next(error);
+    }
+};
 
-export default { createJob, getJobs,updateJob };
+export default { createJob, getJobs,updateJob,deleteJob };

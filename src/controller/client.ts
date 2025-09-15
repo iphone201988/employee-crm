@@ -16,6 +16,16 @@ const addClient = async (req: Request, res: Response, next: NextFunction): Promi
         next(error);
     }
 };
+const updateClient = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { clientId } = req.params;
+        await ClientModel.findByIdAndUpdate(clientId, req.body, { new: true });
+        SUCCESS(res, 200, "Client updated successfully", { data: {} });
+    } catch (error) {
+        console.log("error in updateClient", error);
+        next(error);
+    }
+}
 const getClients = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         let { page = 1, limit = 10, search = "", businessTypeId = "", } = req.query;
@@ -331,4 +341,4 @@ const updateClientService = async (req: Request, res: Response, next: NextFuncti
     }
 };
 
-export default { addClient, getClients, getClientServices, updateClientService };
+export default { addClient, updateClient, getClients, getClientServices, updateClientService };
