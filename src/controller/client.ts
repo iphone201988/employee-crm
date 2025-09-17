@@ -130,7 +130,7 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
                     from: 'businesscategories',
                     localField: 'businessTypeId',
                     foreignField: '_id',
-                    as: 'businessTypeInfo'
+                    as: 'businessTypeId'
                 }
             }            
         ])

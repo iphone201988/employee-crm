@@ -373,7 +373,7 @@ const getJobs = async (
                     },
                     {
                         $lookup: {
-                            from: "jobcategories", 
+                            from: "jobcategories",
                             localField: "_id",
                             foreignField: "_id",
                             as: "jobType"
@@ -438,17 +438,11 @@ const getJobs = async (
 const getJobById = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const { jobId } = req.params;
-        const job = await JobModel.aggregate([
-            { $match: { _id: ObjectId(jobId) } },
-            {
-                $lookup: {
-                    from: "jobcategories",
-                    localField: "jobTypeId",
-                    foreignField: "_id",
-                    as: "jobTypeInfo"
-                }
-            }
-        ]);
+        const job = await JobModel.findById(jobId).populate('clientId', 'name email')
+            .populate('jobTypeId', 'name ')
+            .populate('jobManagerId', 'name email department')
+            .populate('teamMembers', 'name email department')
+            .populate('createdBy', 'name email');
         SUCCESS(res, 200, "Job fetched successfully", { data: job });
     } catch (error) {
         console.log("error in getJobById", error);
