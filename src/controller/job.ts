@@ -3,6 +3,7 @@ import { NextFunction, Request, Response } from "express";
 import { BadRequestError } from "../utils/errors";
 import { SUCCESS } from "../utils/response";
 import { JobModel } from "../models/Job";
+import { ObjectId } from "../utils/utills";
 
 const createJob = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -70,7 +71,7 @@ const getJobs = async (
         }
 
         if (search) {
-            query.name = { $regex: search, $options: 'i' } ;
+            query.name = { $regex: search, $options: 'i' };
         }
 
         // Date filtering based on view
@@ -100,7 +101,7 @@ const getJobs = async (
         // Execute queries in parallel
         const [jobs, totalJobs, teamMemberStats, statusDistribution,
             jobManagerDistribution,
-            wipFeeDistribution, statusCounts] = await Promise.all([
+            wipFeeDistribution, statusCounts, jobTypeCounts] = await Promise.all([
                 JobModel
                     .find(query)
                     .sort(sortObj)
@@ -360,6 +361,33 @@ const getJobs = async (
                             count: { $sum: 1 }
                         }
                     }
+                ]),
+                // job type
+                JobModel.aggregate([
+                    { $match: query },
+                    {
+                        $group: {
+                            _id: "$jobTypeId",
+                            count: { $sum: 1 }
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: "jobcategories", 
+                            localField: "_id",
+                            foreignField: "_id",
+                            as: "jobType"
+                        }
+                    },
+                    { $unwind: "$jobType" },
+                    {
+                        $project: {
+                            _id: 1,
+                            count: 1,
+                            name: "$jobType.name"
+                        }
+                    },
+                    { $sort: { count: -1 } }
                 ])
             ]);
 
@@ -392,6 +420,7 @@ const getJobs = async (
             statusDistribution,
             jobManagerDistribution,
             wipFeeDistribution,
+            jobTypeCounts,
 
             filters: {
                 currentView: view,
@@ -406,6 +435,26 @@ const getJobs = async (
         next(error);
     }
 };
+const getJobById = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { jobId } = req.params;
+        const job = await JobModel.aggregate([
+            { $match: { _id: ObjectId(jobId) } },
+            {
+                $lookup: {
+                    from: "jobcategories",
+                    localField: "jobTypeId",
+                    foreignField: "_id",
+                    as: "jobTypeInfo"
+                }
+            }
+        ]);
+        SUCCESS(res, 200, "Job fetched successfully", { data: job });
+    } catch (error) {
+        console.log("error in getJobById", error);
+        next(error);
+    }
+}
 const updateJob = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const { jobId } = req.params;
@@ -427,4 +476,4 @@ const deleteJob = async (req: Request, res: Response, next: NextFunction): Promi
     }
 };
 
-export default { createJob, getJobs,updateJob,deleteJob };
+export default { createJob, getJobs, updateJob, deleteJob, getJobById };

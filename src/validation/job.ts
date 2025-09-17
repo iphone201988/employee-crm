@@ -68,9 +68,18 @@ const updateJobValidation = {
         status: Joi.string().valid('queued', 'inProgress', 'withClient', 'forApproval', 'completed', 'cancelled').optional(),
         priority: Joi.string().valid('high', 'medium', 'low', 'urgent').optional(),
     }),
-}
+};
+const getJobByIdValidation = {
+    params: Joi.object({
+        jobId: Joi.string().required().messages({
+            "string.base": "Job ID must be a string",
+            "any.required": "Job ID is required",
+        }),
+    }),
+};
 
 export default {
     createJobValidation,
-    updateJobValidation
+    updateJobValidation,
+    getJobByIdValidation
 };

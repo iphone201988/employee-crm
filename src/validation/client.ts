@@ -124,5 +124,14 @@ const updateClientServiceValidation = {
        })
     }),
 };
+const getClientByIdValidation = {
+    params: Joi.object({
+        clientId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required().messages({
+            "string.base": "Client ID must be a string",
+            "any.required": "Client ID is required",
+            "string.pattern.base": "Client ID is not valid",
+        }),
+    }),
+};
 
-export default {addClientValidation, updateClientValidation, updateClientServiceValidation};
+export default {addClientValidation, updateClientValidation, updateClientServiceValidation, getClientByIdValidation};

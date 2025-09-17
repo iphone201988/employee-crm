@@ -11,5 +11,6 @@ clientRouter.put("/update/:clientId", authenticate, validate(clientValidation.up
 clientRouter.get("/all", authenticate, clientController.getClients);
 clientRouter.get("/services", authenticate, clientController.getClientServices);
 clientRouter.put("/update-client-services", authenticate, validate(clientValidation.updateClientServiceValidation), clientController.updateClientService);
+clientRouter.get("/:clientId", authenticate, validate(clientValidation.getClientByIdValidation), clientController.getClientById);
 
 export default clientRouter;

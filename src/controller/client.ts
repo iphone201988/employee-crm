@@ -4,6 +4,7 @@ import { ClientModel } from "../models/Client";
 import { BusinessCategoryModel } from "../models/BusinessCategory";
 import { ServicesCategoryModel } from "../models/ServicesCategory";
 import { BadRequestError } from "../utils/errors";
+import { ObjectId } from "../utils/utills";
 
 
 
@@ -117,6 +118,28 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
         next(error);
     }
 };
+const getClientById = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { clientId } = req.params;
+        const [client] = await ClientModel.aggregate([
+            {
+                $match: { _id: ObjectId(clientId) }
+            },
+            {
+                $lookup: {
+                    from: 'businesscategories',
+                    localField: 'businessTypeId',
+                    foreignField: '_id',
+                    as: 'businessTypeInfo'
+                }
+            }            
+        ])
+        SUCCESS(res, 200, "Client fetched successfully", { data: client });
+    } catch (error) {
+        console.log("error in getClientById", error);
+        next(error);
+    }
+}
 const getClientServices = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         // Extract and parse query parameters
@@ -341,4 +364,4 @@ const updateClientService = async (req: Request, res: Response, next: NextFuncti
     }
 };
 
-export default { addClient, updateClient, getClients, getClientServices, updateClientService };
+export default { addClient, updateClient, getClients, getClientServices, updateClientService ,getClientById};
