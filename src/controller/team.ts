@@ -192,7 +192,7 @@ const sendInviteToTeamMember = async (req: Request, res: Response, next: NextFun
             throw new BadRequestError("User does not exist");
         }
         const token = signToken({ id: user._id }, '10m');
-        const link = 'http://localhost:8080/set-password/?token=' + token;
+        const link = `${process.env.FORNTEND_URL}/set-password/?token=` + token;
         await sendEmail(email, 1, link);
         user.passwordResetToken = token;
         await user.save();
