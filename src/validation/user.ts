@@ -264,6 +264,7 @@ const getAccessOftabsValidation = {
       "string.base": "Tab name must be a string",
       "any.required": "Tab name is required",
     }),
+    _cacheBuster: Joi.any().optional()
   })
 }
 export default {
