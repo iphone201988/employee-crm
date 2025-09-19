@@ -90,5 +90,18 @@ const profile = async (req: Request, res: Response, next: NextFunction): Promise
     } catch (error) {
         next(error);
     }
+};
+const updateProfileImage = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { user } = req;
+       console.log(req.body);
+       if(req.file){
+        req.body.avatarUrl = req.file.path;
+       }
+        const result = await UserModel.findByIdAndUpdate(user._id, req.body, { new: true });
+        SUCCESS(res, 200, "Profile Image updated successfully", { data: result });
+    } catch (error) {
+        next(error);
+    }
 }
-export default { login, profile  };
+export default { login, profile, updateProfileImage  };
