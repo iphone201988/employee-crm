@@ -14,4 +14,6 @@ userRouter.post("/send-invite-to-team-member", authenticate, validate(userValida
 userRouter.post("/set-password", validate(userValidation.setPasswordValidation), teamController.setPassword);
 userRouter.get("/dropdown-options", authenticate, teamController.dropdownOptions);
 
+userRouter.get("/get-access-of-tabs", authenticate,validate(userValidation.getAccessOftabsValidation), teamController.getAccessOftabs);
+
 export default userRouter;

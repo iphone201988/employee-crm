@@ -258,10 +258,19 @@ const setPasswordValidation = {
     })
   }),
 }
+const getAccessOftabsValidation = {
+  query: Joi.object({
+    tabName: Joi.string().required().messages({
+      "string.base": "Tab name must be a string",
+      "any.required": "Tab name is required",
+    }),
+  })
+}
 export default {
   addTeamMemberValidation,
   sendInviteToTeamMemberValidation,
   updateTeamMembersValidation,
-  setPasswordValidation
+  setPasswordValidation,
+  getAccessOftabsValidation
 
 };

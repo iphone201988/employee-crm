@@ -96,7 +96,7 @@ const updateProfileImage = async (req: Request, res: Response, next: NextFunctio
         const { user } = req;
        console.log(req.body);
        if(req.file){
-        req.body.avatarUrl = req.file.path;
+        req.body.avatarUrl = '/uploads/' + req.file.path;
        }
         const result = await UserModel.findByIdAndUpdate(user._id, req.body, { new: true });
         SUCCESS(res, 200, "Profile Image updated successfully", { data: result });

@@ -278,4 +278,34 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
         next(error);
     }
 };
-export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions };
+const getAccessOftabs = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { tabName } = req.query;
+        const query = tabName ? { [tabName as string]: true } : {};
+       const result = await FeatureAccessModel.aggregate([
+            { $match: query },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "userId",
+                    foreignField: "_id",
+                    as: "user",
+                    pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1 } }],
+                },
+            },
+            { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+            { $match: { "user": { $ne: null } } },  
+            {
+                $project: {
+                    _id: "$user._id", 
+                    name: "$user.name", 
+                    avatarUrl: "$user.avatarUrl", 
+                },
+            },
+        ]);
+        SUCCESS(res, 200, "fetched successfully", { result });
+    } catch (error) {
+        next(error);
+    }
+}
+export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions , getAccessOftabs};
