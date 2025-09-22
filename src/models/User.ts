@@ -41,8 +41,8 @@ export interface IUser extends Document {
             default: 0
         };
     };
-    jobFees: [{
-        jobId: mongoose.Types.ObjectId;
+    serviceFees: [{
+        serviceId: mongoose.Types.ObjectId;
         fee: number;
     }];
     isLocked: boolean;
@@ -95,9 +95,9 @@ const userSchema = new Schema<IUser>({
         type: Boolean,
         default: false,
     },
-    jobFees: [
+    serviceFees: [
         {
-            jobId: {
+            serviceId: {
                 type: Schema.Types.ObjectId,
                 ref: 'servicesCategory',
                 required: true

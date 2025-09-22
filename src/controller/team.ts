@@ -36,7 +36,7 @@ const addTeamMember = async (req: Request, res: Response, next: NextFunction): P
         if (user) {
             throw new BadRequestError("Email already exists");
         }
-        const jobFees = (await JobCategoryModel.find({})).map((job) => ({ jobId: job._id, fee: 0 }));
+        const serviceFees = (await ServicesCategoryModel.find({})).map((service) => ({ serviceId: service._id, fee: 0 }));
         const teamMember = await UserModel.create({
             name,
             email,
@@ -46,7 +46,7 @@ const addTeamMember = async (req: Request, res: Response, next: NextFunction): P
             hourlyRate,
             billableRate,
             avatarUrl,
-            jobFees
+            serviceFees
         });
         await PermissionModel.create({
             userId: teamMember._id,

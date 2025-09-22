@@ -141,10 +141,10 @@ const updateTeamMembersValidation = {
         isLocked: Joi.boolean().optional().messages({
           "boolean.base": "Is locked must be a boolean",
         }),
-        jobFees:Joi.array().items(Joi.object({
-          jobId: Joi.string().required().messages({
-            "string.base": "Job ID must be a string",
-            "any.required": "Job ID is required",
+        serviceFees:Joi.array().items(Joi.object({
+          serviceId: Joi.string().required().messages({
+            "string.base": "Service ID must be a string",
+            "any.required": "Service ID is required",
           }),
           fee: Joi.number().required().messages({
             "number.base": "Fee must be a number",
@@ -228,10 +228,10 @@ const updateTeamMembersValidation = {
       isLocked: Joi.boolean().optional().messages({
         "boolean.base": "Is locked must be a boolean",
       }),
-      jobFees:Joi.array().items(Joi.object({
-        jobId: Joi.string().required().messages({
-          "string.base": "job ID must be a string",
-          "any.required": "Job ID is required",
+      serviceFees:Joi.array().items(Joi.object({
+        serviceId: Joi.string().required().messages({
+          "string.base": "service ID must be a string",
+          "any.required": "Service ID is required",
         }),
         fee: Joi.number().required().messages({
           "number.base": "Fee must be a number",
