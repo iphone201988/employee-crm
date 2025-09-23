@@ -6,6 +6,10 @@ import { ServicesCategoryModel } from "../models/ServicesCategory";
 import { JobCategoryModel } from "../models/JobCategory";
 import { TimeCategoryModel } from "../models/TimeCategory";
 import { BusinessCategoryModel } from "../models/BusinessCategory";
+import { UserModel } from "../models/User";
+import { ClientModel } from "../models/Client";
+import { JobModel } from "../models/Job";
+import { TimesheetModel } from "../models/Timesheet";
 
 const createCategory = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -111,23 +115,45 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
     try {
         const { type = "all" } = req.query;
         if (type === "department") {
-            const departments = await DepartmentCategoryModel.find();
+            const departments = await DepartmentCategoryModel.find().lean();
+            const teams = await UserModel.find({ role: "team" }, { _id: 1, departmentId: 1, }).lean();
+            departments.forEach((department: any) => {
+                department.count = teams.filter((team: any) => team.departmentId.toString() === department._id.toString()).length
+            })
+
             SUCCESS(res, 200, "Categories fetched successfully", { data: { departments } });
             return;
         } else if (type === "service") {
             const services = await ServicesCategoryModel.find();
+            const clients = await ClientModel.find({"services.0": {$exists: true}}).lean(); 
+            services.forEach((service: any) => {
+                service.count = clients.filter((client: any) => client.services.includes(service._id.toString())).length
+            })
             SUCCESS(res, 200, "Categories fetched successfully", { data: { services } });
             return;
         } else if (type === "job") {
-            const jobs = await JobCategoryModel.find();
+            const jobs = await JobCategoryModel.find().lean();
+            const jobList = await JobModel.find().lean();
+            jobs.forEach((job: any) => {
+                job.count = jobList.filter((jobList: any) => jobList.categoryId.toString() === job._id.toString()).length
+            })
             SUCCESS(res, 200, "Categories fetched successfully", { data: { jobs } });
             return;
         } else if (type === "time") {
-            const times = await TimeCategoryModel.find();
+            const times = await TimeCategoryModel.find().lean();
+            const timesheets = await TimesheetModel.find().lean();
+            times.forEach((time: any) => {
+                time.count = timesheets.filter((timesheet: any) => timesheet.timeId.toString() === time._id.toString()).length
+            })
+
             SUCCESS(res, 200, "Categories fetched successfully", { data: { times } });
             return;
         } else if (type === "bussiness") {
-            const bussiness = await BusinessCategoryModel.find();
+            const bussiness = await BusinessCategoryModel.find().lean();
+            const clients = await ClientModel.find({}, { _id: 1, businessTypeId: 1}).lean();
+            bussiness.forEach((bussiness: any) => {
+                bussiness.count = clients.filter((client: any) => client.businessTypeId.toString() === bussiness._id.toString()).length
+            })
             SUCCESS(res, 200, "Categories fetched successfully", { data: { bussiness } });
             return;
         }  else {

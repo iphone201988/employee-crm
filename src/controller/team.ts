@@ -31,7 +31,7 @@ const uploadImage = async (req: Request, res: Response, next: NextFunction): Pro
 };
 const addTeamMember = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        const { name, email, departmentId, workSchedule, hourlyRate, billableRate, avatarUrl } = req.body;
+        const { name, email, departmentId, workSchedule, hourlyRate, billableRate, avatarUrl, companyId } = req.body;
         const user = await findUserByEmail(email);
         if (user) {
             throw new BadRequestError("Email already exists");
@@ -48,6 +48,8 @@ const addTeamMember = async (req: Request, res: Response, next: NextFunction): P
             avatarUrl,
             serviceFees
         });
+        teamMember.companyId = companyId || req.userId;
+        await teamMember.save();
         await PermissionModel.create({
             userId: teamMember._id,
         });
@@ -307,5 +309,105 @@ const getAccessOftabs = async (req: Request, res: Response, next: NextFunction):
     } catch (error) {
         next(error);
     }
-}
-export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions , getAccessOftabs};
+};
+const addCompany = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { name, email, avatarUrl } = req.body;
+        const user = await findUserByEmail(email);
+        if (user) {
+            throw new BadRequestError("Email already exists");
+        }
+        const member = await UserModel.create({
+            name,
+            email,
+            role: "company",
+            avatarUrl,
+        });
+        member.companyId = member._id;
+        await member.save();
+        await PermissionModel.create({
+            userId: member._id,
+        });
+        await FeatureAccessModel.create({
+            userId: member._id,
+        })
+
+        SUCCESS(res, 200, "Member added successfully", { data: {} });
+    } catch (error) {
+        console.log("error in add company", error);
+        next(error);
+    }
+};
+const getAllCompanyMembers = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        let { page = 1, limit = 10, search = "",  } = req.query;
+        page = parseInt(page as string);
+        limit = parseInt(limit as string);
+        const skip = (page - 1) * limit;
+        const query: any = { role: "company" };
+        if (search) {
+            query.name= { $regex: search, $options: "i" }
+        }
+        const result = await UserModel.aggregate(
+            [
+                { $match: query },
+                { $sort: { createdAt: -1 } },
+                {
+                    $facet: {
+                        total: [{ $count: "count" }],
+                        data: [
+                            { $skip: skip },
+                            { $limit: limit },
+                            {
+                                $unwind: {
+                                    path: "$department",
+                                    preserveNullAndEmptyArrays: true,
+                                }
+                            },
+                            {
+                                $lookup: {
+                                    from: "featureaccesses",
+                                    localField: "_id",
+                                    foreignField: "userId",
+                                    as: "featureAccess",
+                                }
+                            },
+                            {
+                                $unwind: {
+                                    path: "$featureAccess",
+                                    preserveNullAndEmptyArrays: true,
+                                }
+                            },
+                            {
+                                $lookup: {
+                                    from: "permissions",
+                                    localField: "_id",
+                                    foreignField: "userId",
+                                    as: "permission",
+                                },
+                            },
+                            {
+                                $unwind: {
+                                    path: "$permission",
+                                    preserveNullAndEmptyArrays: true,
+                                }
+                            },
+                            {
+                                $project: {
+                                    password: 0
+                                },
+                            },
+                        ]
+                    }
+                }
+            ]);
+        const total = result[0]?.total[0]?.count || 0;
+        const pagination = { total, totalPages: Math.ceil(total / limit) }
+        const companyMembers = result[0]?.data || [];
+        SUCCESS(res, 200, "members fetched successfully", { data: { companyMembers, pagination } });
+    } catch (error) {
+        console.log("error in getAllCompanyMembers", error);
+        next(error);
+    }
+};
+export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions , getAccessOftabs, addCompany, getAllCompanyMembers};

@@ -7,7 +7,7 @@ export interface IUser extends Document {
     password?: string;
     status: 'active' | 'inActive';
     avatarUrl?: string;
-    role: 'superadmin' | 'team';
+    role: 'superadmin' | 'admin' | 'team';
     departmentId: mongoose.Types.ObjectId;
     hourlyRate: number;
     billableRate: number;
@@ -52,6 +52,7 @@ export interface IUser extends Document {
     createdAt: Date;
     updatedAt: Date;
     passwordResetToken: string;
+    companyId?: mongoose.Types.ObjectId;
 }
 
 const userSchema = new Schema<IUser>({
@@ -76,12 +77,11 @@ const userSchema = new Schema<IUser>({
     avatarUrl: String,
     role: {
         type: String,
-        enum: ['superAdmin', 'team'],
+        enum: ['superAdmin', 'company', 'team'],
     },
     departmentId: {
         type: Schema.Types.ObjectId,
         ref: 'Department',
-        required: true,
     },
     hourlyRate: {
         type: Number,
@@ -122,6 +122,12 @@ const userSchema = new Schema<IUser>({
     deviceToken: String,
     deviceType: Number,
     passwordResetToken: String,
+    companyId: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    }
+
 }, {
     timestamps: true,
 });
@@ -129,5 +135,6 @@ const userSchema = new Schema<IUser>({
 userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ departmentId: 1 });
+userSchema.index({ companyId: 1 });
 
 export const UserModel = mongoose.model<IUser>('User', userSchema);

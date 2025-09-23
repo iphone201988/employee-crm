@@ -24,6 +24,7 @@ const addTeamMemberValidation = {
     billableRate: Joi.number().optional().messages({
       "number.base": "Billable rate must be a number",
     }),
+    companyId: Joi.string().allow(null).optional(),
   }),
 };
 
@@ -141,7 +142,7 @@ const updateTeamMembersValidation = {
         isLocked: Joi.boolean().optional().messages({
           "boolean.base": "Is locked must be a boolean",
         }),
-        serviceFees:Joi.array().items(Joi.object({
+        serviceFees: Joi.array().items(Joi.object({
           serviceId: Joi.string().required().messages({
             "string.base": "Service ID must be a string",
             "any.required": "Service ID is required",
@@ -228,7 +229,7 @@ const updateTeamMembersValidation = {
       isLocked: Joi.boolean().optional().messages({
         "boolean.base": "Is locked must be a boolean",
       }),
-      serviceFees:Joi.array().items(Joi.object({
+      serviceFees: Joi.array().items(Joi.object({
         serviceId: Joi.string().required().messages({
           "string.base": "service ID must be a string",
           "any.required": "Service ID is required",
@@ -266,12 +267,27 @@ const getAccessOftabsValidation = {
     }),
     _cacheBuster: Joi.any().optional()
   })
+};
+const addCompanyValidation = {
+  body: Joi.object({
+    name: Joi.string().required().messages({
+      "string.base": "Name must be a string",
+      "any.required": "Name is required",
+    }),
+    email: Joi.string().email().required().messages({
+      "string.base": "Email must be a string",
+      "string.email": "Invalid email format",
+      "any.required": "Email is required",
+    }),
+    avatarUrl: Joi.string().allow(null).optional(),
+  }),
 }
 export default {
   addTeamMemberValidation,
   sendInviteToTeamMemberValidation,
   updateTeamMembersValidation,
   setPasswordValidation,
-  getAccessOftabsValidation
+  getAccessOftabsValidation,
+  addCompanyValidation
 
 };

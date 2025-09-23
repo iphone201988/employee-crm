@@ -16,4 +16,9 @@ userRouter.get("/dropdown-options", authenticate, teamController.dropdownOptions
 
 userRouter.get("/get-access-of-tabs", authenticate,validate(userValidation.getAccessOftabsValidation), teamController.getAccessOftabs);
 
+
+//company 
+userRouter.post("/add-company", authenticate, validate(userValidation.addCompanyValidation), teamController.addCompany);
+userRouter.get("/get-all-company-members", authenticate, teamController.getAllCompanyMembers);
+
 export default userRouter;
