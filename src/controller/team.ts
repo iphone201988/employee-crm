@@ -69,7 +69,10 @@ const getAllTeamMembers = async (req: Request, res: Response, next: NextFunction
         page = parseInt(page as string);
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
-        const query: any = { role: "team" };
+        const query: any = { role: "team", };
+        if(req.user.role !== "superAdmin") {
+            query.companyId = req.user.companyId;
+        }
         if (search) {
             query.name= { $regex: search, $options: "i" }
         }
