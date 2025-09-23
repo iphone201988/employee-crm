@@ -234,7 +234,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
         const data: any = {};
         if (type === "all") {
 
-            const [departments, services, jobs, times, bussiness, teams, clients, jobList] = await Promise.all(
+            const [departments, services, jobs, times, bussiness, teams, clients, jobList, companies] = await Promise.all(
                 [
                     DepartmentCategoryModel.find({}, { _id: 1, name: 1, }).lean(),
                     ServicesCategoryModel.find({}, { _id: 1, name: 1, }).lean(),
@@ -244,6 +244,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
                     UserModel.find({ role: "team" }, { _id: 1, name: 1, }).lean(),
                     ClientModel.find({}, { _id: 1, name: 1, }).lean(),
                     JobModel.find({}, { _id: 1, name: 1, }).lean(),
+                    UserModel.find({role: "company"}, { _id: 1, name: 1, }).lean(),
                 ]);
             data.departments = departments;
             data.services = services;
@@ -253,6 +254,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
             data.teams = teams;
             data.clients = clients;
             data.jobList = jobList;
+            data.companies = companies
 
         } else if (type === "department") {
             data.departments = await DepartmentCategoryModel.find({}, { _id: 1, name: 1, }).lean();
@@ -268,6 +270,8 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
             data.teams = await UserModel.find({ role: "team" }, { _id: 1, name: 1, }).lean();
         } else if (type === "client") {
             data.clients = await ClientModel.find({}, { _id: 1, name: 1, }).lean();
+        } else if(type === "company"){
+            data.companies = await UserModel.find({ role: "company" }, { _id: 1, name: 1, }).lean();
         } else if(type === "jobList"){
             let query:any = { };
             if(clientId) query.clientId = clientId;
