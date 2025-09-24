@@ -20,5 +20,7 @@ userRouter.get("/get-access-of-tabs", authenticate,validate(userValidation.getAc
 //company 
 userRouter.post("/add-company", authenticate, validate(userValidation.addCompanyValidation), teamController.addCompany);
 userRouter.get("/get-all-company-members", authenticate, teamController.getAllCompanyMembers);
+userRouter.get("/get-all-company-members/:companyId", authenticate, teamController.getCompanyById);
+userRouter.get("/get-all-company-members/:companyId/team-members", authenticate, teamController.companyTeamMembers);
 
 export default userRouter;
