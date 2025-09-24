@@ -1,6 +1,7 @@
 import Joi from "joi";
 const addClientValidation = {
     body: Joi.object({
+        companyId: Joi.string().allow(null).optional(),
         clientRef: Joi.string().required().messages({
             "string.base": "Client ref must be a string",
             "any.required": "Client ref is required",

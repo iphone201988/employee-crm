@@ -10,6 +10,9 @@ import { ObjectId } from "../utils/utills";
 
 const addClient = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
+        if(req.user.role !== "superAdmin") {
+            req.body.companyId = req.user.companyId;
+        }
         await ClientModel.create(req.body);
         SUCCESS(res, 200, "Client added successfully", { data: {} });
     } catch (error) {
@@ -34,6 +37,9 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
         const query: any = {};
+        if(req.user.role !== "superAdmin") {
+            query.companyId = req.user.companyId;
+        }
 
         if (search) {
             query.$or = [

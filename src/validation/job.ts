@@ -1,6 +1,7 @@
 import Joi from "joi";
 const createJobValidation = {
     body: Joi.object({
+        companyId: Joi.string().allow(null).optional(),
         name: Joi.string().required().messages({
             "string.base": "name must be a string",
             "any.required": "Name is required",

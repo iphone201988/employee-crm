@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IClient extends Document {
+  companyId: Schema.Types.ObjectId;
   clientRef: string;
   name: string;
   businessTypeId: Schema.Types.ObjectId;
@@ -23,6 +24,11 @@ export interface IClient extends Document {
 
 const ClientSchema: Schema = new Schema<IClient>(
   {
+    companyId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Company',
+      required: true,
+    },
     clientRef: {
       type: String,
       required: true,
@@ -104,5 +110,5 @@ const ClientSchema: Schema = new Schema<IClient>(
     timestamps: true,
   }
 );
-
+ClientSchema.index({ companyId: 1 });
 export const ClientModel = mongoose.model<IClient>('Client', ClientSchema);

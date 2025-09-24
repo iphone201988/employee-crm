@@ -70,11 +70,11 @@ const getAllTeamMembers = async (req: Request, res: Response, next: NextFunction
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
         const query: any = { role: "team", };
-        if(req.user.role !== "superAdmin") {
+        if (req.user.role !== "superAdmin") {
             query.companyId = req.user.companyId;
         }
         if (search) {
-            query.name= { $regex: search, $options: "i" }
+            query.name = { $regex: search, $options: "i" }
         }
         if (departmentId) {
             query.departmentId = ObjectId(departmentId);
@@ -247,7 +247,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
                     UserModel.find({ role: "team" }, { _id: 1, name: 1, }).lean(),
                     ClientModel.find({}, { _id: 1, name: 1, }).lean(),
                     JobModel.find({}, { _id: 1, name: 1, }).lean(),
-                    UserModel.find({role: "company"}, { _id: 1, name: 1, }).lean(),
+                    UserModel.find({ role: "company" }, { _id: 1, name: 1, }).lean(),
                 ]);
             data.departments = departments;
             data.services = services;
@@ -273,11 +273,11 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
             data.teams = await UserModel.find({ role: "team" }, { _id: 1, name: 1, }).lean();
         } else if (type === "client") {
             data.clients = await ClientModel.find({}, { _id: 1, name: 1, }).lean();
-        } else if(type === "company"){
+        } else if (type === "company") {
             data.companies = await UserModel.find({ role: "company" }, { _id: 1, name: 1, }).lean();
-        } else if(type === "jobList"){
-            let query:any = { };
-            if(clientId) query.clientId = clientId;
+        } else if (type === "jobList") {
+            let query: any = {};
+            if (clientId) query.clientId = clientId;
             data.jobs = await JobModel.find(query, { _id: 1, name: 1, }).lean();
         } else {
             throw new BadRequestError("Invalid type");
@@ -291,7 +291,7 @@ const getAccessOftabs = async (req: Request, res: Response, next: NextFunction):
     try {
         const { tabName } = req.query;
         const query = tabName ? { [tabName as string]: true } : {};
-       const result = await FeatureAccessModel.aggregate([
+        const result = await FeatureAccessModel.aggregate([
             { $match: query },
             {
                 $lookup: {
@@ -303,12 +303,12 @@ const getAccessOftabs = async (req: Request, res: Response, next: NextFunction):
                 },
             },
             { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
-            { $match: { "user": { $ne: null } } },  
+            { $match: { "user": { $ne: null } } },
             {
                 $project: {
-                    _id: "$user._id", 
-                    name: "$user.name", 
-                    avatarUrl: "$user.avatarUrl", 
+                    _id: "$user._id",
+                    name: "$user.name",
+                    avatarUrl: "$user.avatarUrl",
                 },
             },
         ]);
@@ -347,13 +347,13 @@ const addCompany = async (req: Request, res: Response, next: NextFunction): Prom
 };
 const getAllCompanyMembers = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        let { page = 1, limit = 10, search = "",  } = req.query;
+        let { page = 1, limit = 10, search = "", } = req.query;
         page = parseInt(page as string);
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
         const query: any = { role: "company" };
         if (search) {
-            query.name= { $regex: search, $options: "i" }
+            query.name = { $regex: search, $options: "i" }
         }
         const result = await UserModel.aggregate(
             [
@@ -400,8 +400,25 @@ const getAllCompanyMembers = async (req: Request, res: Response, next: NextFunct
                                 }
                             },
                             {
+                                $lookup: {
+                                    from: "users",
+                                    let: { companyId: "$_id", role: "team" },
+                                    pipeline: [
+                                        { $match: { $expr: { $and: [{ $eq: ["$companyId", "$$companyId"] }, { $eq: ["$role", "$$role"] }] } } },
+                                        { $project: { _id: 1 } },
+                                    ],
+                                    as: "company",
+                                },
+                            },
+                            {
+                                $addFields: {
+                                    teamMembersCount: { $size: "$company" },
+                                },
+                            },
+                            {
                                 $project: {
-                                    password: 0
+                                    password: 0,
+                                    company: 0,
                                 },
                             },
                         ]
@@ -417,4 +434,4 @@ const getAllCompanyMembers = async (req: Request, res: Response, next: NextFunct
         next(error);
     }
 };
-export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions , getAccessOftabs, addCompany, getAllCompanyMembers};
+export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions, getAccessOftabs, addCompany, getAllCompanyMembers };

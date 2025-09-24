@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IJob extends Document {
+    companyId: mongoose.Types.ObjectId;
     name: string;
     clientId: mongoose.Types.ObjectId;
     jobTypeId: mongoose.Types.ObjectId;
@@ -19,6 +20,10 @@ export interface IJob extends Document {
 
 const JobSchema: Schema = new Schema<IJob>(
     {
+        companyId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Company',
+        },
         name: {
             type: String,
             required: true,
@@ -84,6 +89,7 @@ const JobSchema: Schema = new Schema<IJob>(
 );
 
 // Indexes for better performance
+JobSchema.index({ companyId: 1 });
 JobSchema.index({ clientId: 1 });
 JobSchema.index({ jobManagerId: 1 });
 JobSchema.index({ status: 1 });

@@ -7,6 +7,9 @@ import { ObjectId } from "../utils/utills";
 
 const createJob = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
+        if(req.user.role !== "superAdmin") {
+            req.body.companyId = req.user.companyId;
+        }
         req.body.createdBy = req.userId;
         await JobModel.create(req.body);
         SUCCESS(res, 200, "Job created successfully", { data: {} });
@@ -53,6 +56,9 @@ const getJobs = async (
 
         // Build query
         const query: any = {};
+        if(req.user.role !== "superAdmin") {
+            query.companyId = req.user.companyId;
+        }
 
         if (status && status !== "All") {
             query.status = status;
