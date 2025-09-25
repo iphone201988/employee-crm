@@ -289,6 +289,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
 };
 const getAccessOftabs = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
+        
         const { tabName } = req.query;
         const query = tabName ? { [tabName as string]: true } : {};
         const result = await FeatureAccessModel.aggregate([
@@ -334,11 +335,59 @@ const addCompany = async (req: Request, res: Response, next: NextFunction): Prom
         await member.save();
         await PermissionModel.create({
             userId: member._id,
+            companyId: member._id,
+            approveTimesheets: true,
+            editServices: true,
+            editJobBuilder: true,
+            editJobTemplates: true,
         });
         await FeatureAccessModel.create({
             userId: member._id,
-        })
+            companyId: member._id, // Assuming companyId = user's own _id for company role
 
+            // Time
+            myTimesheet: true,
+            allTimesheets: true,
+            timeLogs: true,
+
+            // WIP & Debtors
+            WIP: true,
+            agedWIP: true,
+            invoices: true,
+            agedDebtors: true,
+            writeOff: true,
+
+            // Clients
+            clientList: true,
+            clientBreakdown: true,
+
+            // Jobs
+            services: true,
+            jobTemplates: true,
+            jobBuilder: true,
+            jobList: true,
+
+            // Expenses
+            clientExpenses: true,
+            teamExpenses: true,
+
+            // Reports
+            reports: true,
+
+            // Team
+            teamList: true,
+            rates: true,
+            permissions: true,
+            access: true,
+
+            // Settings
+            general: true,
+            invoicing: true,
+            tags: true,
+            clientImport: true,
+            timeLogsImport: true,
+            integrations: true,
+        });
         SUCCESS(res, 200, "Member added successfully", { data: {} });
     } catch (error) {
         console.log("error in add company", error);
@@ -452,57 +501,57 @@ const getCompanyById = async (req: Request, res: Response, next: NextFunction): 
         next(error);
     };
 }
-    const companyTeamMembers = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
-        try {
-            const { companyId } = req.params;
-            let { page = 1, limit = 10, search = "", departmentId = "" } = req.query;
-            page = parseInt(page as string);
-            limit = parseInt(limit as string);
-            const skip = (page - 1) * limit;
-            const query: any = { role: "team", companyId: ObjectId(companyId) };
-            if (search) {
-                query.name = { $regex: search, $options: "i" }
-            }
-            if (departmentId) {
-                query.departmentId = ObjectId(departmentId);
-            }
-            const result = await UserModel.aggregate(
-                [
-                    { $match: query },
-                    { $sort: { createdAt: -1 } },
-                    {
-                        $facet: {
-                            total: [{ $count: "count" }],
-                            data: [
-                                { $skip: skip },
-                                { $limit: limit },
-                                {
-                                    $lookup: {
-                                        from: "departmentcategories",
-                                        localField: "departmentId",
-                                        foreignField: "_id",
-                                        as: "department",
-                                    },
-                                },
-                                {
-                                    $unwind: {
-                                        path: "$department",
-                                        preserveNullAndEmptyArrays: true,
-                                    }
-                                },
-                                { $project: { password: 0 } },
-                            ]
-                        }
-                    }
-                ]);
-            const total = result[0]?.total[0]?.count || 0;
-            const pagination = { total, totalPages: Math.ceil(total / limit) }
-            const teamMembers = result[0]?.data || [];
-            SUCCESS(res, 200, "Team members fetched successfully", { data: { teamMembers, pagination } });
-        } catch (error) {
-            console.log("error in companyTeamMembers", error);
-            next(error);
+const companyTeamMembers = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { companyId } = req.params;
+        let { page = 1, limit = 10, search = "", departmentId = "" } = req.query;
+        page = parseInt(page as string);
+        limit = parseInt(limit as string);
+        const skip = (page - 1) * limit;
+        const query: any = { role: "team", companyId: ObjectId(companyId) };
+        if (search) {
+            query.name = { $regex: search, $options: "i" }
         }
-    };
+        if (departmentId) {
+            query.departmentId = ObjectId(departmentId);
+        }
+        const result = await UserModel.aggregate(
+            [
+                { $match: query },
+                { $sort: { createdAt: -1 } },
+                {
+                    $facet: {
+                        total: [{ $count: "count" }],
+                        data: [
+                            { $skip: skip },
+                            { $limit: limit },
+                            {
+                                $lookup: {
+                                    from: "departmentcategories",
+                                    localField: "departmentId",
+                                    foreignField: "_id",
+                                    as: "department",
+                                },
+                            },
+                            {
+                                $unwind: {
+                                    path: "$department",
+                                    preserveNullAndEmptyArrays: true,
+                                }
+                            },
+                            { $project: { password: 0 } },
+                        ]
+                    }
+                }
+            ]);
+        const total = result[0]?.total[0]?.count || 0;
+        const pagination = { total, totalPages: Math.ceil(total / limit) }
+        const teamMembers = result[0]?.data || [];
+        SUCCESS(res, 200, "Team members fetched successfully", { data: { teamMembers, pagination } });
+    } catch (error) {
+        console.log("error in companyTeamMembers", error);
+        next(error);
+    }
+};
 
-    export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions, getAccessOftabs, addCompany, getAllCompanyMembers, getCompanyById, companyTeamMembers };
+export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions, getAccessOftabs, addCompany, getAllCompanyMembers, getCompanyById, companyTeamMembers };

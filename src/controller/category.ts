@@ -14,47 +14,48 @@ import { TimesheetModel } from "../models/Timesheet";
 const createCategory = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const { name, type } = req.body;
+        const companyId = req.user.companyId;
         if (!name) {
             throw new BadRequestError("Category name is required");
         };
         if (type === "department") {
-            const existingCategory = await DepartmentCategoryModel.findOne({ name });
+            const existingCategory = await DepartmentCategoryModel.findOne({ name, companyId });
             if (existingCategory) {
                 throw new BadRequestError("Category already exists");
             }
-            await DepartmentCategoryModel.create({ name });
+            await DepartmentCategoryModel.create({ name, companyId });
             SUCCESS(res, 200, "Category created successfully", { data: {} });
             return;
         } else if (type === "service") {
-            const existingCategory = await ServicesCategoryModel.findOne({ name });
+            const existingCategory = await ServicesCategoryModel.findOne({ name, companyId });
             if (existingCategory) {
                 throw new BadRequestError("Category already exists");
             }
-            await ServicesCategoryModel.create({ name });
+            await ServicesCategoryModel.create({ name, companyId });
             SUCCESS(res, 200, "Category created successfully", { data: {} });
             return;
         } else if (type === "job") {
-            const existingCategory = await JobCategoryModel.findOne({ name });
+            const existingCategory = await JobCategoryModel.findOne({ name, companyId });
             if (existingCategory) {
                 throw new BadRequestError("Category already exists");
             }
-            await JobCategoryModel.create({ name });
+            await JobCategoryModel.create({ name, companyId });
             SUCCESS(res, 200, "Category created successfully", { data: {} });
             return;
         } else if (type === "time") {
-            const existingCategory = await TimeCategoryModel.findOne({ name });
+            const existingCategory = await TimeCategoryModel.findOne({ name, companyId });
             if (existingCategory) {
                 throw new BadRequestError("Category already exists");
             }
-            await TimeCategoryModel.create({ name });
+            await TimeCategoryModel.create({ name, companyId });
             SUCCESS(res, 200, "Category created successfully", { data: {} });
             return;
         } else if (type === "bussiness") {
-            const existingCategory = await BusinessCategoryModel.findOne({ name });
+            const existingCategory = await BusinessCategoryModel.findOne({ name, companyId });
             if (existingCategory) {
                 throw new BadRequestError("Category already exists");
             }
-            await BusinessCategoryModel.create({ name });
+            await BusinessCategoryModel.create({ name, companyId });
             SUCCESS(res, 200, "Category created successfully", { data: {} });
             return;
         } else {
@@ -113,9 +114,10 @@ const deleteCategory = async (req: Request, res: Response, next: NextFunction): 
 };
 const getCategories = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
+        const { companyId } = req.user;
         const { type = "all" } = req.query;
         if (type === "department") {
-            const departments = await DepartmentCategoryModel.find().lean();
+            const departments = await DepartmentCategoryModel.find({ companyId }).lean();
             const teams = await UserModel.find({ role: "team" }, { _id: 1, departmentId: 1, }).lean();
             departments.forEach((department: any) => {
                 department.count = teams.filter((team: any) => team.departmentId.toString() === department._id.toString()).length
@@ -124,7 +126,7 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             SUCCESS(res, 200, "Categories fetched successfully", { data: { departments } });
             return;
         } else if (type === "service") {
-            const services = await ServicesCategoryModel.find();
+            const services = await ServicesCategoryModel.find({ companyId }).lean();
             const clients = await ClientModel.find({ "services.0": { $exists: true } }).lean();
             services.forEach((service: any) => {
                 service.count = clients.filter((client: any) => client.services.includes(service._id.toString())).length
@@ -132,7 +134,7 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             SUCCESS(res, 200, "Categories fetched successfully", { data: { services } });
             return;
         } else if (type === "job") {
-            const jobs = await JobCategoryModel.find().lean();
+            const jobs = await JobCategoryModel.find({ companyId }).lean();
             const jobList = await JobModel.find({}, { jobTypeId: 1 }).lean();
             jobs.forEach((job: any) => {
                 job.count = jobList.filter((jobList: any) => jobList.jobTypeId.toString() === job._id.toString()).length
@@ -140,7 +142,7 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             SUCCESS(res, 200, "Categories fetched successfully", { data: { jobs } });
             return;
         } else if (type === "time") {
-            const times = await TimeCategoryModel.find().lean();
+            const times = await TimeCategoryModel.find({ companyId }).lean();
             const timesheets = await TimesheetModel.find().lean();
             times.forEach((time: any) => {
                 time.count = timesheets.filter((timesheet: any) => timesheet.timeId.toString() === time._id.toString()).length
@@ -149,7 +151,7 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             SUCCESS(res, 200, "Categories fetched successfully", { data: { times } });
             return;
         } else if (type === "bussiness") {
-            const bussiness = await BusinessCategoryModel.find().lean();
+            const bussiness = await BusinessCategoryModel.find({ companyId }).lean();
             const clients = await ClientModel.find({}, { _id: 1, businessTypeId: 1 }).lean();
             bussiness.forEach((bussiness: any) => {
                 bussiness.count = clients.filter((client: any) => client.businessTypeId.toString() === bussiness._id.toString()).length
@@ -159,11 +161,11 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
         } else {
             const [departments, services, jobs, times, bussiness, userDepartments, clientServices, clientBussiness, jobList, timesheets] = await Promise.all(
                 [
-                    DepartmentCategoryModel.find().lean(),
-                    ServicesCategoryModel.find().lean(),
-                    JobCategoryModel.find().lean(),
-                    TimeCategoryModel.find().lean(),
-                    BusinessCategoryModel.find().lean(),
+                    DepartmentCategoryModel.find({ companyId }).lean(),
+                    ServicesCategoryModel.find({ companyId }).lean(),
+                    JobCategoryModel.find({ companyId }).lean(),
+                    TimeCategoryModel.find({ companyId }).lean(),
+                    BusinessCategoryModel.find({ companyId }).lean(),
                     UserModel.find({ role: "team" }, { _id: 1, departmentId: 1, }).lean(),
                     ClientModel.find({ "services.0": { $exists: true } }, { _id: 1, services: 1 }).lean(),
                     ClientModel.find({}, { _id: 1, businessTypeId: 1 }).lean(),
@@ -185,7 +187,7 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             bussiness.forEach((bussiness: any) => {
                 bussiness.count = clientBussiness.filter((client: any) => client.businessTypeId.toString() === bussiness._id.toString()).length
             })
-            
+
             SUCCESS(res, 200, "Categories fetched successfully", { data: { departments, services, jobs, times, bussiness } });
             return;
         }

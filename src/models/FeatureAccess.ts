@@ -3,6 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IFeatureAccess extends Document {
   _id: mongoose.Types.ObjectId;
   userId: mongoose.Types.ObjectId;
+  companyId: mongoose.Types.ObjectId;
 
   // Time
   myTimesheet: boolean;
@@ -50,6 +51,7 @@ export interface IFeatureAccess extends Document {
 
 const featureAccessSchema = new Schema<IFeatureAccess>({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   // Time
   myTimesheet: { type: Boolean, default: true },
   allTimesheets: { type: Boolean, default: false },

@@ -3,6 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IPermission extends Document {
   _id: mongoose.Types.ObjectId;
   userId: mongoose.Types.ObjectId;
+  companyId: mongoose.Types.ObjectId;
   approveTimesheets: boolean;
   editServices: boolean;
   editJobBuilder: boolean;
@@ -13,6 +14,11 @@ const permissionSchema = new Schema<IPermission>({
   userId: {
     type: Schema.Types.ObjectId,
     ref: 'User',
+    required: true,
+  },
+  companyId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Company',
     required: true,
   },
   approveTimesheets: {
