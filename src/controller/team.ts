@@ -31,6 +31,7 @@ const uploadImage = async (req: Request, res: Response, next: NextFunction): Pro
 };
 const addTeamMember = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
+        const currentUser = req.user;
         const { name, email, departmentId, workSchedule, hourlyRate, billableRate, avatarUrl, companyId } = req.body;
         const user = await findUserByEmail(email);
         if (user) {
@@ -52,9 +53,11 @@ const addTeamMember = async (req: Request, res: Response, next: NextFunction): P
         await teamMember.save();
         await PermissionModel.create({
             userId: teamMember._id,
+            companyId: currentUser.companyId
         });
         await FeatureAccessModel.create({
             userId: teamMember._id,
+            companyId: currentUser.companyId
         })
 
         SUCCESS(res, 200, "Team member added successfully", { data: {} });
