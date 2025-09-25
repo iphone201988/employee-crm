@@ -294,7 +294,7 @@ const getAccessOftabs = async (req: Request, res: Response, next: NextFunction):
     try {
         
         const { tabName } = req.query;
-        const query = tabName ? { [tabName as string]: true } : {};
+        const query = tabName ? { [tabName as string]: true , companyId: req.user.companyId} : {};
         const result = await FeatureAccessModel.aggregate([
             { $match: query },
             {
