@@ -21,10 +21,19 @@ const loginValidation = {
     }),
   }),
 };
-
+const loginAsGuestValidation = {
+  body: Joi.object({
+     userId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required().messages({
+      "string.base": "User ID must be a string",
+      "any.required": "User ID is required",
+      "string.pattern.base": "Invalid User ID format",
+  }),
+  }),
+};
 
 
 export default {
   loginValidation,
+  loginAsGuestValidation
   
 };

@@ -3,7 +3,7 @@ import { UserModel } from "../models/User";
 import { LoginRequest } from "../types/request/types";
 import { BadRequestError } from "../utils/errors";
 import { SUCCESS } from "../utils/response";
-import { comparePassword, findUserByEmail, generateOtp, signToken } from "../utils/utills";
+import { comparePassword, findUserByEmail, findUserById, generateOtp, signToken } from "../utils/utills";
 
 const login = async (req: Request<{}, {}, LoginRequest>, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -104,4 +104,18 @@ const updateProfileImage = async (req: Request, res: Response, next: NextFunctio
         next(error);
     }
 }
-export default { login, profile, updateProfileImage  };
+const loginAsguest = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { userId } = req.body;
+        const user = await findUserById(userId);
+        console.log(user);
+        if (!user) {
+            throw new BadRequestError("User does not exist");
+        }
+        const token = signToken({ id: user._id, admin: true });
+        SUCCESS(res, 200, "Login successful", { data: { token } });
+    } catch (error) {
+        next(error);
+    }
+};
+export default { login, profile, updateProfileImage , loginAsguest  };

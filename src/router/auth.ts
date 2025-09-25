@@ -10,5 +10,6 @@ const authRouter = express.Router();
 authRouter.post("/login", validate(authValidation.loginValidation), authController.login);
 authRouter.get("/me", authenticate, authController.profile);
 authRouter.put("/update-profile-image", authenticate,upload.single('file'), authController.updateProfileImage);
+authRouter.post("/login-as-guest", validate(authValidation.loginAsGuestValidation), authController.loginAsguest);
 
 export default authRouter;
