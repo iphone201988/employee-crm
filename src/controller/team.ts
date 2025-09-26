@@ -304,7 +304,7 @@ const getAccessOftabs = async (req: Request, res: Response, next: NextFunction):
                     localField: "userId",
                     foreignField: "_id",
                     as: "user",
-                    pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1 } }],
+                    pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1, role: 1 } }],
                 },
             },
             { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
@@ -314,6 +314,7 @@ const getAccessOftabs = async (req: Request, res: Response, next: NextFunction):
                     _id: "$user._id",
                     name: "$user.name",
                     avatarUrl: "$user.avatarUrl",
+                    role: "$user.role",
                 },
             },
         ]);
