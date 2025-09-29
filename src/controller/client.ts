@@ -10,7 +10,7 @@ import { ObjectId } from "../utils/utills";
 
 const addClient = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        if(req.user.role !== "superAdmin") {
+        if (req.user.role !== "superAdmin") {
             req.body.companyId = req.user.companyId;
         }
         await ClientModel.create(req.body);
@@ -37,7 +37,7 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
         const query: any = {};
-        if(req.user.role !== "superAdmin") {
+        if (req.user.role !== "superAdmin") {
             query.companyId = req.user.companyId;
         }
 
@@ -138,7 +138,7 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
                     foreignField: '_id',
                     as: 'businessTypeId'
                 }
-            }            
+            }
         ])
         SUCCESS(res, 200, "Client fetched successfully", { data: client });
     } catch (error) {
@@ -146,6 +146,16 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
         next(error);
     }
 }
+const deleteClient = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { clientId } = req.params;
+        await ClientModel.findByIdAndUpdate(clientId, { status: "inActive" }, { new: true });
+        SUCCESS(res, 200, "Client deleted successfully", { data: {} });
+    } catch (error) {
+        console.log("error in deleteClient", error);
+        next(error);
+    }
+};
 const getClientServices = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         // Extract and parse query parameters
@@ -209,10 +219,10 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
                 $facet: {
                     // Get total count for pagination
                     total: [
-                        { $match: query }, 
+                        { $match: query },
                         { $count: "count" }
                     ],
-                    
+
                     // Get paginated client data
                     data: [
                         { $match: query },
@@ -239,7 +249,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
                             $project: projection
                         }
                     ],
-                    
+
                     // Service counts for filtered/searched clients
                     filteredServiceCounts: [
                         { $match: query },
@@ -269,7 +279,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
                         },
                         { $sort: { count: -1 } }
                     ],
-                    
+
                     // Global service counts for all clients (for UI breakdown cards)
                     globalServiceCounts: [
                         { $unwind: '$services' },
@@ -345,8 +355,8 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
         SUCCESS(res, 200, "Clients fetched successfully", {
             data: clients,
             pagination,
-            breakdown: completeGlobalCounts, 
-            filteredCounts: completeFilteredCounts, 
+            breakdown: completeGlobalCounts,
+            filteredCounts: completeFilteredCounts,
         });
 
     } catch (error) {
@@ -370,4 +380,4 @@ const updateClientService = async (req: Request, res: Response, next: NextFuncti
     }
 };
 
-export default { addClient, updateClient, getClients, getClientServices, updateClientService ,getClientById};
+export default { addClient, updateClient, getClients, getClientServices, updateClientService, getClientById, deleteClient };
