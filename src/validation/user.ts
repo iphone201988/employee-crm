@@ -120,6 +120,9 @@ const updateTeamMembersValidation = {
         clientImport: Joi.boolean().optional().messages({
           "boolean.base": "Client import must be a boolean",
         }),
+        jobImport: Joi.boolean().optional().messages({
+          "boolean.base": "Job import must be a boolean",
+        }),
         timeLogsImport: Joi.boolean().optional().messages({
           "boolean.base": "Time logs import must be a boolean",
         }),

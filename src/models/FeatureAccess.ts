@@ -45,6 +45,7 @@ export interface IFeatureAccess extends Document {
   invoicing: boolean;
   tags: boolean;
   clientImport: boolean;
+  jobImport: boolean;
   timeLogsImport: boolean;
   integrations: boolean;
 }

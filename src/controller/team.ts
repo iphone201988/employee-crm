@@ -249,7 +249,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
                     TimeCategoryModel.find({ companyId }, { _id: 1, name: 1, }).lean(),
                     BusinessCategoryModel.find({ companyId }, { _id: 1, name: 1, }).lean(),
                     UserModel.find({ role: "team", companyId }, { _id: 1, name: 1, }).lean(),
-                    ClientModel.find({ companyId }, { _id: 1, name: 1, }).lean(),
+                    ClientModel.find({ companyId, status: "active" }, { _id: 1, name: 1, }).lean(),
                     JobModel.find({ companyId }, { _id: 1, name: 1, }).lean(),
                     UserModel.find({ role: "company" }, { _id: 1, name: 1, }).lean(),
                 ]);
@@ -264,23 +264,23 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
             data.companies = companies
 
         } else if (type === "department") {
-            data.departments = await DepartmentCategoryModel.find({companyId}, { _id: 1, name: 1, }).lean();
+            data.departments = await DepartmentCategoryModel.find({ companyId }, { _id: 1, name: 1, }).lean();
         } else if (type === "service") {
-            data.services = await ServicesCategoryModel.find({companyId}, { _id: 1, name: 1, }).lean();
+            data.services = await ServicesCategoryModel.find({ companyId }, { _id: 1, name: 1, }).lean();
         } else if (type === "job") {
-            data.jobs = await JobCategoryModel.find({companyId}, { _id: 1, name: 1, }).lean();
+            data.jobs = await JobCategoryModel.find({ companyId }, { _id: 1, name: 1, }).lean();
         } else if (type === "time") {
-            data.times = await TimeCategoryModel.find({companyId}, { _id: 1, name: 1, }).lean();
+            data.times = await TimeCategoryModel.find({ companyId }, { _id: 1, name: 1, }).lean();
         } else if (type === "bussiness") {
-            data.bussiness = await BusinessCategoryModel.find({companyId}, { _id: 1, name: 1, }).lean();
+            data.bussiness = await BusinessCategoryModel.find({ companyId }, { _id: 1, name: 1, }).lean();
         } else if (type === "team") {
             data.teams = await UserModel.find({ role: "team" }, { _id: 1, name: 1, }).lean();
         } else if (type === "client") {
-            data.clients = await ClientModel.find({companyId}, { _id: 1, name: 1, }).lean();
+            data.clients = await ClientModel.find({ companyId, status: "active" }, { _id: 1, name: 1, }).lean();
         } else if (type === "company") {
             data.companies = await UserModel.find({ role: "company" }, { _id: 1, name: 1, }).lean();
         } else if (type === "jobList") {
-            let query: any = {companyId};
+            let query: any = { companyId };
             if (clientId) query.clientId = clientId;
             data.jobs = await JobModel.find(query, { _id: 1, name: 1, }).lean();
         } else {
@@ -293,9 +293,9 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
 };
 const getAccessOftabs = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        
+
         const { tabName } = req.query;
-        const query = tabName ? { [tabName as string]: true , companyId: req.user.companyId} : {};
+        const query = tabName ? { [tabName as string]: true, companyId: req.user.companyId } : {};
         const result = await FeatureAccessModel.aggregate([
             { $match: query },
             {
@@ -390,6 +390,7 @@ const addCompany = async (req: Request, res: Response, next: NextFunction): Prom
             invoicing: true,
             tags: true,
             clientImport: true,
+            jobImport: true,
             timeLogsImport: true,
             integrations: true,
         });
