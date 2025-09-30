@@ -36,7 +36,7 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
         page = parseInt(page as string);
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
-        const query: any = {};
+        const query: any = { status: "active" };
         if (req.user.role !== "superAdmin") {
             query.companyId = req.user.companyId;
         }
@@ -165,7 +165,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
         const skip = (page - 1) * limit;
 
         // Build search query
-        const query: any = {};
+        const query: any = {status: "active"};
         if (search) {
             query.$or = [
                 { clientName: { $regex: search, $options: 'i' } },
