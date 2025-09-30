@@ -93,6 +93,7 @@ const featureAccessSchema = new Schema<IFeatureAccess>({
   invoicing: { type: Boolean, default: false },
   tags: { type: Boolean, default: false },
   clientImport: { type: Boolean, default: false },
+  jobImport: { type: Boolean, default: false },
   timeLogsImport: { type: Boolean, default: false },
   integrations: { type: Boolean, default: false },
 });
