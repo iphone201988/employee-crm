@@ -45,7 +45,7 @@ export interface IUser extends Document {
         serviceId: mongoose.Types.ObjectId;
         fee: number;
     }];
-    JobFees: [{
+    jobFees: [{
         jobId: mongoose.Types.ObjectId;
         fee: number;
     }];
@@ -113,7 +113,7 @@ const userSchema = new Schema<IUser>({
             }
         }
     ],
-    JobFees: [
+    jobFees: [
         {
             jobId: {
                 type: Schema.Types.ObjectId,
