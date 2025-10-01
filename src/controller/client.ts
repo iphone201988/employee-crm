@@ -271,7 +271,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
                         },
                         {
                             $lookup: {
-                                from: 'jobCategories',
+                                from: 'jobcategories',
                                 localField: '_id',
                                 foreignField: '_id',
                                 as: 'jobCategoryInfo'
@@ -291,6 +291,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
 
                     // Global job category counts for all clients (for UI breakdown cards)
                     globalJobCategoriesCounts: [
+                        { $match: {status: "active",companyId}},
                         { $unwind: '$jobCategories' },
                         {
                             $group: {
@@ -300,7 +301,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
                         },
                         {
                             $lookup: {
-                                from: 'jobCategories',
+                                from: 'jobcategories',
                                 localField: '_id',
                                 foreignField: '_id',
                                 as: 'jobCategoryInfo'
@@ -333,6 +334,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
             filteredCountsMap.set(s.serviceId.toString(), s.count);
         });
 
+        console.log("globalJobCategoriesCounts", globalJobCategoriesCounts,);
         const globalCountsMap = new Map();
         globalJobCategoriesCounts.forEach((s: any) => {
             globalCountsMap.set(s.serviceId.toString(), s.count);
