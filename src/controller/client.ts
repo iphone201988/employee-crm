@@ -164,9 +164,9 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
         page = parseInt(page as string);
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
-
+        const companyId = req.user.companyId;
         // Build search query
-        const query: any = {status: "active"};
+        const query: any = {status: "active",companyId};
         if (search) {
             query.$or = [
                 { clientName: { $regex: search, $options: 'i' } },
@@ -178,7 +178,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
         }
 
         // Get all available job categories
-        const allJobCategories = await JobCategoryModel.find({}, 'name _id').lean();
+        const allJobCategories = await JobCategoryModel.find({companyId}, 'name _id').lean();
         const selectedJobCategories = allJobCategories.map(s => s._id);
 
         // Build dynamic projection with job category toggles
