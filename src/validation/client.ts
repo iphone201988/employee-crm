@@ -122,6 +122,18 @@ const updateClientServiceValidation = {
            })
        })).messages({
            "array.base": "Client services must be an array",
+       }),
+       clientJobCategories: Joi.array().items(Joi.object({
+           clientId: Joi.string().required().messages({
+               "string.base": "Client ID must be a string",
+               "any.required": "Client ID is required",
+           }),
+           jobCategoriesIds: Joi.array().items(Joi.string()).required().messages({
+               "array.base": "Job categories IDs must be an array",
+               "any.required": "Job categories IDs is required",
+           })
+       })).messages({
+           "array.base": "Client job categories must be an array",
        })
     }),
 };

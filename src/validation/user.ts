@@ -156,6 +156,18 @@ const updateTeamMembersValidation = {
           }),
         })).optional().messages({
           "array.base": "Job fees must be an array",
+        }),
+        jobFees: Joi.array().items(Joi.object({
+          jobId: Joi.string().required().messages({
+            "string.base": "Job ID must be a string",
+            "any.required": "Service ID is required",
+          }),
+          fee: Joi.number().required().messages({
+            "number.base": "Fee must be a number",
+            "any.required": "Fee is required",
+          }),
+        })).optional().messages({
+          "array.base": "Job fees must be an array",
         })
       })),
     permissions: Joi.array().items(Joi.object({
@@ -243,7 +255,19 @@ const updateTeamMembersValidation = {
         }),
       })).optional().messages({
         "array.base": "Job fees must be an array",
-      })
+      }),
+      jobFees: Joi.array().items(Joi.object({
+          jobId: Joi.string().required().messages({
+            "string.base": "Job ID must be a string",
+            "any.required": "Service ID is required",
+          }),
+          fee: Joi.number().required().messages({
+            "number.base": "Fee must be a number",
+            "any.required": "Fee is required",
+          }),
+        })).optional().messages({
+          "array.base": "Job fees must be an array",
+        })
 
 
     })

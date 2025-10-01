@@ -5,6 +5,7 @@ import { BusinessCategoryModel } from "../models/BusinessCategory";
 import { ServicesCategoryModel } from "../models/ServicesCategory";
 import { BadRequestError } from "../utils/errors";
 import { ObjectId } from "../utils/utills";
+import { JobCategoryModel } from "../models/JobCategory";
 
 
 
@@ -176,40 +177,40 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
             query.businessTypeId = businessTypeId;
         }
 
-        // Get all available services
-        const allServices = await ServicesCategoryModel.find({}, 'name _id').lean();
-        const selectedServices = allServices.map(s => s._id);
+        // Get all available job categories
+        const allJobCategories = await JobCategoryModel.find({}, 'name _id').lean();
+        const selectedJobCategories = allJobCategories.map(s => s._id);
 
-        // Build dynamic projection with service toggles
+        // Build dynamic projection with job category toggles
         const projection: any = {
             clientRef: 1,
             name: 1,
             businessTypeId: 1,
             businessType: { $arrayElemAt: ['$businessType.name', 0] },
-            serviceDetails: {
+            jobCategories: {
                 $map: {
-                    input: '$serviceDetails',
-                    as: 'service',
+                    input: '$jobCategories',
+                    as: 'job',
                     in: {
-                        _id: '$$service._id',
-                        name: '$$service.name'
+                        _id: '$$job._id',
+                        name: '$$job.name'
                     }
                 }
             }
         };
 
-        // Add dynamic service toggle fields
-        selectedServices.forEach((service: any) => {
+        // Add dynamic job category toggle fields
+        selectedJobCategories.forEach((service: any) => {
             projection[service.toString()] = {
-                $in: [service, '$serviceDetails._id']
+                $in: [service, '$jobCategories._id']
             };
         });
 
-        // Also add service name-based toggles for easier frontend usage
-        allServices.forEach(service => {
+        // Also add job category name-based toggles for easier frontend usage
+        allJobCategories.forEach(service => {
             const fieldName = service.name.toLowerCase().replace(/\s+/g, '');
             projection[fieldName] = {
-                $in: [service.name, '$serviceDetails.name']
+                $in: [service.name, '$jobCategories.name']
             };
         });
 
@@ -246,33 +247,41 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
                             }
                         },
                         {
+                            $lookup: {
+                                from: 'jobcategories',
+                                localField: 'jobCategories',
+                                foreignField: '_id',
+                                as: 'jobCategories'
+                            }
+                        },
+                        {
                             $project: projection
                         }
                     ],
 
-                    // Service counts for filtered/searched clients
-                    filteredServiceCounts: [
+                    // Filtered job category counts for filtered/searched clients
+                    filteredJobCategoriesCounts: [
                         { $match: query },
-                        { $unwind: '$services' },
+                        { $unwind: '$jobCategories' },
                         {
                             $group: {
-                                _id: '$services',
+                                _id: '$jobCategories',
                                 count: { $sum: 1 }
                             }
                         },
                         {
                             $lookup: {
-                                from: 'servicescategories',
+                                from: 'jobCategories',
                                 localField: '_id',
                                 foreignField: '_id',
-                                as: 'serviceInfo'
+                                as: 'jobCategoryInfo'
                             }
                         },
-                        { $unwind: '$serviceInfo' },
+                        { $unwind: '$jobCategoryInfo' },
                         {
                             $project: {
                                 serviceId: '$_id',
-                                serviceName: '$serviceInfo.name',
+                                serviceName: '$jobCategoryInfo.name',
                                 count: 1,
                                 _id: 0
                             }
@@ -280,28 +289,28 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
                         { $sort: { count: -1 } }
                     ],
 
-                    // Global service counts for all clients (for UI breakdown cards)
-                    globalServiceCounts: [
-                        { $unwind: '$services' },
+                    // Global job category counts for all clients (for UI breakdown cards)
+                    globalJobCategoriesCounts: [
+                        { $unwind: '$jobCategories' },
                         {
                             $group: {
-                                _id: '$services',
+                                _id: '$jobCategories',
                                 count: { $sum: 1 }
                             }
                         },
                         {
                             $lookup: {
-                                from: 'servicescategories',
+                                from: 'jobCategories',
                                 localField: '_id',
                                 foreignField: '_id',
-                                as: 'serviceInfo'
+                                as: 'jobCategoryInfo'
                             }
                         },
-                        { $unwind: '$serviceInfo' },
+                        { $unwind: '$jobCategoryInfo' },
                         {
                             $project: {
                                 serviceId: '$_id',
-                                serviceName: '$serviceInfo.name',
+                                serviceName: '$jobCategoryInfo.name',
                                 count: 1,
                                 _id: 0
                             }
@@ -315,30 +324,30 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
         // Extract results from aggregation
         const clients = result.data;
         const totalClients = result.total[0]?.count || 0;
-        const filteredServiceCounts = result.filteredServiceCounts;
-        const globalServiceCounts = result.globalServiceCounts;
+        const filteredJobCategoriesCounts = result.filteredJobCategoriesCounts;
+        const globalJobCategoriesCounts = result.globalJobCategoriesCounts;
 
         // Create maps for efficient lookup
         const filteredCountsMap = new Map();
-        filteredServiceCounts.forEach((s: any) => {
+        filteredJobCategoriesCounts.forEach((s: any) => {
             filteredCountsMap.set(s.serviceId.toString(), s.count);
         });
 
         const globalCountsMap = new Map();
-        globalServiceCounts.forEach((s: any) => {
+        globalJobCategoriesCounts.forEach((s: any) => {
             globalCountsMap.set(s.serviceId.toString(), s.count);
         });
 
         // Merge with all services to include zero counts
-        const completeFilteredCounts = allServices.map(service => ({
-            serviceId: service._id,
-            serviceName: service.name,
+        const completeFilteredCounts = allJobCategories.map(service => ({
+            jobCategoryId: service._id,
+            jobCategoryName: service.name,
             count: filteredCountsMap.get(service._id.toString()) || 0
         }));
 
-        const completeGlobalCounts = allServices.map(service => ({
-            serviceId: service._id,
-            serviceName: service.name,
+        const completeGlobalCounts = allJobCategories.map(service => ({
+            jobCategoryId: service._id,
+           jobCategoryName: service.name,
             count: globalCountsMap.get(service._id.toString()) || 0
         }));
 
@@ -367,10 +376,10 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
 
 const updateClientService = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        const { clientServices } = req.body;
-        for (const service of clientServices) {
-            const { clientId, servicesTds } = service;
-            await ClientModel.findByIdAndUpdate(clientId, { services: servicesTds }, { new: true });
+        const { clientJobCategories } = req.body;
+        for (const jobCategory of clientJobCategories) {
+            const { clientId, jobCategoriesIds } = jobCategory;
+            await ClientModel.findByIdAndUpdate(clientId, { jobCategories: jobCategoriesIds }, { new: true });
 
         }
         SUCCESS(res, 200, "Client updated successfully", {});

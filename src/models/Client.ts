@@ -18,8 +18,10 @@ export interface IClient extends Document {
   audit: boolean;
   status: string;
   services: Schema.Types.ObjectId[];
+  jobCategories: Schema.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
+
 }
 
 const ClientSchema: Schema = new Schema<IClient>(
@@ -103,6 +105,12 @@ const ClientSchema: Schema = new Schema<IClient>(
       {
         type: Schema.Types.ObjectId,
         ref: 'servicesCategory',
+      },
+    ],
+    jobCategories: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'JobCategory',
       },
     ],
   },

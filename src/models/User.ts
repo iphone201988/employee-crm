@@ -45,6 +45,10 @@ export interface IUser extends Document {
         serviceId: mongoose.Types.ObjectId;
         fee: number;
     }];
+    JobFees: [{
+        jobId: mongoose.Types.ObjectId;
+        fee: number;
+    }];
     isLocked: boolean;
     jti: string;
     deviceToken: string;
@@ -100,6 +104,20 @@ const userSchema = new Schema<IUser>({
             serviceId: {
                 type: Schema.Types.ObjectId,
                 ref: 'servicesCategory',
+                required: true
+            },
+            fee: {
+                type: Number,
+                default: 0,
+                min: 0
+            }
+        }
+    ],
+    JobFees: [
+        {
+            jobId: {
+                type: Schema.Types.ObjectId,
+                ref: 'JobCategory',
                 required: true
             },
             fee: {
