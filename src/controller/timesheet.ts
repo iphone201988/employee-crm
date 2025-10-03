@@ -325,7 +325,8 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                 status,
                 weekStart,
                 weekEnd,
-                userId
+                userId,
+                departmentId,
             }
         });
 

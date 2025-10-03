@@ -10,6 +10,7 @@ import { UserModel } from "../models/User";
 import { ClientModel } from "../models/Client";
 import { JobModel } from "../models/Job";
 import { TimesheetModel } from "../models/Timesheet";
+import { TimeEntryModel } from "../models/TimeEntry";
 
 const createCategory = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -143,9 +144,9 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             return;
         } else if (type === "time") {
             const times = await TimeCategoryModel.find({ companyId }).lean();
-            const timesheets = await TimesheetModel.find().lean();
+            const timeEntries = await TimeEntryModel.find({ companyId }, { _id: 1, timeCategoryId: 1 }).lean();
             times.forEach((time: any) => {
-                time.count = timesheets.filter((timesheet: any) => timesheet.timeId.toString() === time._id.toString()).length
+                time.count = timeEntries.filter((timeEntry: any) => timeEntry.timeCategoryId.toString() === time._id.toString()).length
             })
 
             SUCCESS(res, 200, "Categories fetched successfully", { data: { times } });
@@ -159,7 +160,7 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             SUCCESS(res, 200, "Categories fetched successfully", { data: { bussiness } });
             return;
         } else {
-            const [departments, services, jobs, times, bussiness, userDepartments, clientServices, clientBussiness, jobList, timesheets] = await Promise.all(
+            const [departments, services, jobs, times, bussiness, userDepartments, clientServices, clientBussiness, jobList, timeEntries] = await Promise.all(
                 [
                     DepartmentCategoryModel.find({ companyId }).lean(),
                     ServicesCategoryModel.find({ companyId }).lean(),
@@ -170,7 +171,7 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
                     ClientModel.find({ "services.0": { $exists: true } }, { _id: 1, services: 1 }).lean(),
                     ClientModel.find({}, { _id: 1, businessTypeId: 1 }).lean(),
                     JobModel.find({}, { jobTypeId: 1 }).lean(),
-                    TimesheetModel.find().lean(),
+                    TimeEntryModel.find({ companyId }, { _id: 1, timeCategoryId: 1 }).lean(),
                 ]);
             departments.forEach((department: any) => {
                 department.count = userDepartments.filter((team: any) => team.departmentId.toString() === department._id.toString()).length
@@ -182,7 +183,7 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
                 job.count = jobList.filter((jobList: any) => jobList.jobTypeId.toString() === job._id.toString()).length
             })
             times.forEach((time: any) => {
-                time.count = timesheets.filter((timesheet: any) => timesheet.timeId.toString() === time._id.toString()).length
+                time.count = timeEntries.filter((timeEntry: any) => timeEntry.timeCategoryId.toString() === time._id.toString()).length
             })
             bussiness.forEach((bussiness: any) => {
                 bussiness.count = clientBussiness.filter((client: any) => client.businessTypeId.toString() === bussiness._id.toString()).length
