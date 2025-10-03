@@ -6,6 +6,11 @@ const timesheetSchema = new mongoose.Schema({
         ref: 'User',
         required: true,
     },
+    companyId: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+    },
     weekStart: {
         type: Date,
         required: true,

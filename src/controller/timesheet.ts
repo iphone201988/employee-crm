@@ -12,14 +12,14 @@ import { JobCategoryModel } from "../models/JobCategory";
 const addTimesheet = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const userId = req.userId;
-        const { weekStart, weekEnd, timeEntries, ...otherData } = req.body;
+        const companyId = req.user.companyId;
+        const { weekStart, weekEnd, timeEntries, isbillable, ...otherData } = req.body;
 
-        let timesheet = await TimesheetModel.findOne({ weekStart, weekEnd, userId });
+        let timesheet = await TimesheetModel.findOne({ weekStart, weekEnd, userId, isbillable });
         if (timesheet) {
             Object.assign(timesheet, otherData);
-            await timesheet.save();
         } else {
-            timesheet = await TimesheetModel.create({ weekStart, weekEnd, userId, ...otherData });
+            timesheet = await TimesheetModel.create({ weekStart, weekEnd, userId, isbillable, companyId, ...otherData });
         }
 
         const timeEntriesIds: any = [];
@@ -27,6 +27,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
             for (const timeEntry of timeEntries) {
                 timeEntry.timesheetId = timesheet._id;
                 timeEntry.userId = timesheet?.userId || userId;
+                timeEntry.companyId = timesheet?.companyId || companyId;
 
                 // Use proper filter for upsert
                 const data = await TimeEntryModel.findOneAndUpdate(
@@ -59,16 +60,6 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
     }
 };
 
-const updateTimesheet = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
-    try {
-        const { timesheetId } = req.params;
-        await TimesheetModel.findByIdAndUpdate(timesheetId, req.body, { new: true });
-        SUCCESS(res, 200, "Timesheet updated successfully", { data: {} });
-    } catch (error) {
-        console.log("error in updateTimesheet", error);
-        next(error);
-    }
-};
 const getAllTimesheets = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         // Parse query parameters
@@ -76,10 +67,11 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
             page = 1,
             limit = 10,
             search = "",
-            status = "", // "Not Submitted", "For Review", "Rejected", "Approved"
+            status = "", // "draft", "submitted", "reviewed", "approved", "rejected"
             weekStart = "",
             weekEnd = "",
             userId = "",
+            departmentId = ""
         } = req.query;
 
         const pageNum = Math.max(1, parseInt(page as string));
@@ -89,9 +81,9 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
         // Build match query
         const matchQuery: any = {};
 
-        if (search) {
-            // Search in user name - will be handled in lookup pipeline
-            matchQuery.searchTerm = search;
+        // Add companyId if available in user context
+        if (req.user?.companyId) {
+            matchQuery.companyId = req.user.companyId;
         }
 
         if (status) {
@@ -99,15 +91,15 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
         }
 
         if (userId) {
-            matchQuery.userId = ObjectId(userId);
+            matchQuery.userId = ObjectId(userId as string);
         }
 
+        // Fix date filtering - use correct field names from schema
         if (weekStart || weekEnd) {
-            matchQuery.weekstart = {};
-            if (weekStart) matchQuery.weekstart.$gte = new Date(weekStart as string);
-            if (weekEnd) matchQuery.weekstart.$lte = new Date(weekEnd as string);
+            matchQuery.weekStart = {};
+            if (weekStart) matchQuery.weekStart.$gte = new Date(weekStart as string);
+            if (weekEnd) matchQuery.weekStart.$lte = new Date(weekEnd as string);
         }
-
 
         const pipeline = [
             // Initial match (exclude search for now)
@@ -129,14 +121,14 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                             $project: {
                                 name: 1,
                                 email: 1,
-                                capacity: 1, // Assuming user has capacity field
-                                avatar: 1
+                                avatar: 1,
+                                departmentId: 1
                             }
                         }
                     ]
                 }
             },
-            { $unwind: '$user' },
+            { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
 
             // Apply search filter after user lookup
             ...(search ? [{
@@ -147,38 +139,58 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                     ]
                 }
             }] : []),
+            // macth department
+            ...(departmentId ? [{
+                $match: {
+                    'user.departmentId': ObjectId(departmentId as string)
+                }
+            }] : []),
 
-            // Add calculated fields
+            // Add calculated fields based on actual schema
             {
                 $addFields: {
-                    // Calculate total hours for the week
+                    // Calculate total hours from dailySummary
                     weekTotalHours: {
-                        $add: [
-                            '$totalLoggedHours.monday',
-                            '$totalLoggedHours.tuesday',
-                            '$totalLoggedHours.wednesday',
-                            '$totalLoggedHours.thursday',
-                            '$totalLoggedHours.friday',
-                            '$totalLoggedHours.saturday',
-                            '$totalLoggedHours.sunday'
-                        ]
+                        $sum: '$dailySummary.totalLogged'
                     },
 
-                    // Calculate variance (difference between capacity and logged hours)
+                    // Calculate total billable hours
+                    weekBillableHours: {
+                        $sum: '$dailySummary.billable'
+                    },
+
+                    // Calculate total non-billable hours
+                    weekNonBillableHours: {
+                        $sum: '$dailySummary.nonBillable'
+                    },
+
+                    // Calculate total capacity
+                    weekCapacity: {
+                        $sum: '$dailySummary.capacity'
+                    },
+
+                    // Calculate variance
                     weekVariance: {
                         $subtract: [
-                            '$totalLoggedHours.total',
-                            { $ifNull: ['$user.capacity', 35] } // Default capacity 35 hours
+                            { $sum: '$dailySummary.capacity' },
+                            { $sum: '$dailySummary.totalLogged' }
                         ]
                     },
 
-                    // Format dates
-                    formattedWeekStart: {
-                        $dateToString: {
-                            format: '%d/%m/%Y',
-                            date: '$weekstart'
-                        }
-                    },
+                    // // Format dates
+                    // formattedWeekStart: {
+                    //     $dateToString: {
+                    //         format: '%d/%m/%Y',
+                    //         date: '$weekStart'
+                    //     }
+                    // },
+
+                    // formattedWeekEnd: {
+                    //     $dateToString: {
+                    //         format: '%d/%m/%Y',
+                    //         date: '$weekEnd'
+                    //     }
+                    // },
 
                     // Determine submission status
                     submissionStatus: {
@@ -187,6 +199,7 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                                 { case: { $eq: ['$status', 'approved'] }, then: 'Approved' },
                                 { case: { $eq: ['$status', 'rejected'] }, then: 'Rejected' },
                                 { case: { $eq: ['$status', 'submitted'] }, then: 'For Review' },
+                                { case: { $eq: ['$status', 'reviewed'] }, then: 'For Review' },
                                 { case: { $eq: ['$status', 'draft'] }, then: 'Not Submitted' }
                             ],
                             default: 'Not Submitted'
@@ -209,23 +222,35 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                             $project: {
                                 _id: 1,
                                 userId: 1,
-                                userName: '$user.name',
-                                userEmail: '$user.email',
-                                userAvatar: '$user.avatar',
-                                capacity: { $ifNull: ['$user.capacity', 35] },
-                                weekstart: 1,
-                                weekend: 1,
-                                formattedWeekStart: 1,
+                                user: 1,
+                                // capacity: { $ifNull: ['$user.capacity', 40] }, // Default 40 hours per week
+                                weekStart: 1,
+                                weekEnd: 1,
+                                // formattedWeekStart: 1,
+                                // formattedWeekEnd: 1,
                                 status: 1,
                                 submissionStatus: 1,
-                                totalHours: '$weekTotalHours',
-                                variance: '$weekVariance',
-                                billableHours: '$billableHours.total',
-                                nonBillableHours: '$nonBillableHours.total',
+                                // totalHours: '$weekTotalHours',
+                                // billableHours: '$weekBillableHours',
+                                // nonBillableHours: '$weekNonBillableHours',
+                                // totalCapacity: '$weekCapacity',
+                                // variance: '$weekVariance',
                                 submittedAt: 1,
+                                submittedBy: 1,
+                                reviewedAt: 1,
+                                reviewedBy: 1,
                                 approvedAt: 1,
+                                approvedBy: 1,
                                 rejectedAt: 1,
-                                entries: { $size: { $ifNull: ['$entries', []] } } // Count of entries
+                                rejectedBy: 1,
+                                rejectionReason: 1,
+                                entriesCount: { $size: { $ifNull: ['$timeEntries', []] } },
+                                // Include summary totals from schema
+                                totalBillable: 1,
+                                totalNonBillable: 1,
+                                totalLogged: 1,
+                                totalVariance: 1,
+                                totalCapacity: 1
                             }
                         }
                     ],
@@ -235,7 +260,9 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                         {
                             $group: {
                                 _id: '$submissionStatus',
-                                count: { $sum: 1 }
+                                count: { $sum: 1 },
+                                totalHours: { $sum: '$weekTotalHours' },
+                                totalBillable: { $sum: '$weekBillableHours' }
                             }
                         }
                     ]
@@ -256,10 +283,15 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
             forReview: 0,
             rejected: 0,
             approved: 0,
-            notSubmitted: 0
+            draft: 0,
+            totalHours: 0,
+            totalBillableHours: 0
         };
 
         summaryData.forEach((item: any) => {
+            summary.totalHours += item.totalHours || 0;
+            summary.totalBillableHours += item.totalBillable || 0;
+
             switch (item._id) {
                 case 'For Review':
                     summary.forReview = item.count;
@@ -271,7 +303,7 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                     summary.approved = item.count;
                     break;
                 case 'Not Submitted':
-                    summary.notSubmitted = item.count;
+                    summary.draft = item.count;
                     break;
             }
         });
@@ -286,8 +318,6 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                 totalPages,
                 totalItems: totalTimesheets,
                 limit: limitNum,
-                hasNextPage: pageNum < totalPages,
-                hasPrevPage: pageNum > 1
             },
             summary,
             filters: {
@@ -295,14 +325,16 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                 status,
                 weekStart,
                 weekEnd,
+                userId
             }
         });
 
     } catch (error) {
-        console.error("Error in getTimesheets:", error);
+        console.error("Error in getAllTimesheets:", error);
         next(error);
     }
 };
+
 const getTimesheet = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     const { timesheetId, weekStart, weekEnd, userId } = req.query;
     const user = await findUserById(userId || req.user._id.toString());
@@ -344,4 +376,4 @@ const getTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
 };
 
 
-export default { addTimesheet, updateTimesheet, getAllTimesheets, getTimesheet };
+export default { addTimesheet, getAllTimesheets, getTimesheet };

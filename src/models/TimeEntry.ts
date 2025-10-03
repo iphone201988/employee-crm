@@ -6,6 +6,11 @@ const TimeEntry = new mongoose.Schema({
         ref: 'User',
         required: true,
     },
+    companyId: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+    },
     timesheetId: {
         type: Schema.Types.ObjectId,
         ref: 'Timesheet',
