@@ -7,6 +7,8 @@ import timesheetValidation from "../validation/timesheet";
 const timesheetRouter = express.Router();
 
 timesheetRouter.post("/add", authenticate, validate(timesheetValidation.addTimesheetValidation), timesheetController.addTimesheet);
-timesheetRouter.get("/all", authenticate, timesheetController.getTimesheets);
+timesheetRouter.get("/all", authenticate, timesheetController.getAllTimesheets);
 timesheetRouter.put("/update/:timesheetId", authenticate, validate(timesheetValidation.updateTimesheetValidation), timesheetController.updateTimesheet);
+timesheetRouter.get("/", authenticate, timesheetController.getTimesheet);
+
 export default timesheetRouter;

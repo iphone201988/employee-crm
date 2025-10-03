@@ -3,13 +3,56 @@ import { NextFunction, Request, Response } from "express";
 import { SUCCESS } from "../utils/response";
 import { TimesheetModel } from "../models/Timesheet";
 import { BadRequestError } from "../utils/errors";
-import { ObjectId } from "../utils/utills";
+import { findUserById, ObjectId } from "../utils/utills";
+import { TimeEntryModel } from "../models/TimeEntry";
+import { ClientModel } from "../models/Client";
+import { JobModel } from "../models/Job";
+import { JobCategoryModel } from "../models/JobCategory";
 
 const addTimesheet = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        req.body.userId = req.userId;
-        await TimesheetModel.create(req.body);
-        SUCCESS(res, 200, "Timesheet added successfully", { data: {} });
+        const userId = req.userId;
+        const { weekStart, weekEnd, timeEntries, ...otherData } = req.body;
+
+        let timesheet = await TimesheetModel.findOne({ weekStart, weekEnd, userId });
+        if (timesheet) {
+            Object.assign(timesheet, otherData);
+            await timesheet.save();
+        } else {
+            timesheet = await TimesheetModel.create({ weekStart, weekEnd, userId, ...otherData });
+        }
+
+        const timeEntriesIds: any = [];
+        if (timeEntries?.length > 0) {
+            for (const timeEntry of timeEntries) {
+                timeEntry.timesheetId = timesheet._id;
+                timeEntry.userId = timesheet?.userId || userId;
+
+                // Use proper filter for upsert
+                const data = await TimeEntryModel.findOneAndUpdate(
+                    {
+                        timesheetId: timesheet._id,
+                        clientId: timeEntry.clientId,
+                        jobId: timeEntry.jobId,
+                        timeCategoryId: timeEntry.timeCategoryId
+                    },
+                    timeEntry,
+                    {
+                        upsert: true,
+                        new: true // Return the updated/created document
+                    }
+                );
+
+                if (data) {
+                    timeEntriesIds.push(data._id);
+                }
+            }
+        }
+
+        timesheet.timeEntries = timeEntriesIds;
+        await timesheet.save();
+
+        SUCCESS(res, 200, "Timesheet added successfully", { data: timesheet });
     } catch (error) {
         console.log("error in addTimesheet", error);
         next(error);
@@ -26,7 +69,7 @@ const updateTimesheet = async (req: Request, res: Response, next: NextFunction):
         next(error);
     }
 };
-const getTimesheets = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+const getAllTimesheets = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         // Parse query parameters
         const {
@@ -45,7 +88,7 @@ const getTimesheets = async (req: Request, res: Response, next: NextFunction): P
 
         // Build match query
         const matchQuery: any = {};
-        
+
         if (search) {
             // Search in user name - will be handled in lookup pipeline
             matchQuery.searchTerm = search;
@@ -120,7 +163,7 @@ const getTimesheets = async (req: Request, res: Response, next: NextFunction): P
                             '$totalLoggedHours.sunday'
                         ]
                     },
-                    
+
                     // Calculate variance (difference between capacity and logged hours)
                     weekVariance: {
                         $subtract: [
@@ -128,7 +171,7 @@ const getTimesheets = async (req: Request, res: Response, next: NextFunction): P
                             { $ifNull: ['$user.capacity', 35] } // Default capacity 35 hours
                         ]
                     },
-                    
+
                     // Format dates
                     formattedWeekStart: {
                         $dateToString: {
@@ -136,7 +179,7 @@ const getTimesheets = async (req: Request, res: Response, next: NextFunction): P
                             date: '$weekstart'
                         }
                     },
-                    
+
                     // Determine submission status
                     submissionStatus: {
                         $switch: {
@@ -157,7 +200,7 @@ const getTimesheets = async (req: Request, res: Response, next: NextFunction): P
                 $facet: {
                     // Get total count
                     total: [{ $count: "count" }],
-                    
+
                     // Get paginated data
                     data: [
                         { $skip: skip },
@@ -186,7 +229,7 @@ const getTimesheets = async (req: Request, res: Response, next: NextFunction): P
                             }
                         }
                     ],
-                    
+
                     // Get summary statistics
                     summary: [
                         {
@@ -216,7 +259,7 @@ const getTimesheets = async (req: Request, res: Response, next: NextFunction): P
             notSubmitted: 0
         };
 
-        summaryData.forEach((item:any) => {
+        summaryData.forEach((item: any) => {
             switch (item._id) {
                 case 'For Review':
                     summary.forReview = item.count;
@@ -260,6 +303,45 @@ const getTimesheets = async (req: Request, res: Response, next: NextFunction): P
         next(error);
     }
 };
+const getTimesheet = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    const { timesheetId, weekStart, weekEnd, userId } = req.query;
+    const user = await findUserById(userId || req.user._id.toString());
+    const query: any = {};
+    if (timesheetId) {
+        query._id = timesheetId;
+    } else if (weekStart && weekEnd) {
+        query.weekStart = new Date(weekStart as string);
+        query.weekEnd = new Date(weekEnd as string);
+        query.userId = userId || user?._id;
+    } else {
+        throw new Error("Invalid query parameters");
+    };
+    console.log("query", query);
+
+    try {
+        const timesheet: any = await TimesheetModel.findOne(query).populate('timeEntries').lean() || null;
+        console.log("user._id", user?._id);
+        const [jobs, jobCategories] = await Promise.all([
+            JobModel.find(
+                { companyId: user?.companyId, teamMembers: user?._id },
+                { _id: 1, clientId: 1, name: 1 }
+            ).lean(),
+            JobCategoryModel.find({ companyId: user?.companyId }, { _id: 1, name: 1 }).lean()
+        ]);
+        const clientIds = jobs.map((job: any) => job.clientId);
+        const clients = await ClientModel.find({ _id: { $in: clientIds } }, { _id: 1, name: 1, clientRef: 1 }).lean();
+
+        SUCCESS(res, 200, "Timesheet fetched successfully",
+            {
+                data: timesheet,
+                dropdoenOptionals: { clients, jobs, jobCategories },
+                billableRate: user?.billableRate,
+            });
+    } catch (error) {
+        console.error("Error in getTimesheet:", error);
+        next(error);
+    }
+};
 
 
-export default{ addTimesheet, updateTimesheet, getTimesheets };
+export default { addTimesheet, updateTimesheet, getAllTimesheets, getTimesheet };

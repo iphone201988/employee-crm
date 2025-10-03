@@ -6,11 +6,11 @@ const timesheetSchema = new mongoose.Schema({
         ref: 'User',
         required: true,
     },
-    weekstart: {
+    weekStart: {
         type: Date,
         required: true,
     },
-    weekend: {
+    weekEnd: {
         type: Date,
         required: true,
     },
@@ -19,87 +19,20 @@ const timesheetSchema = new mongoose.Schema({
         required: true,
         default: "daft"
     },
-    entries: [{
-        clientId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Client',
-            required: true,
-        },
-        jobId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Job',
-            required: true,
-        },
-        timeCategoryId: {
-            type: Schema.Types.ObjectId,
-            ref: 'TimeCategory',
-            required: true,
-        },
-        description: {
-            type: String,
-        },
-        isbillable: {
-            type: Boolean,
-            required: true,
-            default: false
-        },
-        rate: {
-            type: Number,
-        },
-        dailyHours: {
-            monday: { type: Number, default: 0, min: 0, max: 24 },
-            tuesday: { type: Number, default: 0, min: 0, max: 24 },
-            wednesday: { type: Number, default: 0, min: 0, max: 24 },
-            thursday: { type: Number, default: 0, min: 0, max: 24 },
-            friday: { type: Number, default: 0, min: 0, max: 24 },
-            saturday: { type: Number, default: 0, min: 0, max: 24 },
-            sunday: { type: Number, default: 0, min: 0, max: 24 }
-        },
-        totalHours: { type: Number, default: 0 },
-        totalAmount: { type: Number, default: 0 },
+    timeEntries: [{ type: Schema.Types.ObjectId, ref: 'TimeEntry' }],
+    dailySummary: [{
+        date: Date,
+        billable: Number,         // in minutes
+        nonBillable: Number,      // in minutes
+        totalLogged: Number,      // billable + nonBillable
+        capacity: Number,         // e.g. 480 minutes (8h)
+        variance: Number          // capacity - totalLogged
     }],
-    billableHours: {
-        monday: { type: Number, default: 0 },
-        tuesday: { type: Number, default: 0 },
-        wednesday: { type: Number, default: 0 },
-        thursday: { type: Number, default: 0 },
-        friday: { type: Number, default: 0 },
-        saturday: { type: Number, default: 0 },
-        sunday: { type: Number, default: 0 },
-        total: { type: Number, default: 0 }
-    },
-
-    nonBillableHours: {
-        monday: { type: Number, default: 0 },
-        tuesday: { type: Number, default: 0 },
-        wednesday: { type: Number, default: 0 },
-        thursday: { type: Number, default: 0 },
-        friday: { type: Number, default: 0 },
-        saturday: { type: Number, default: 0 },
-        sunday: { type: Number, default: 0 },
-        total: { type: Number, default: 0 }
-    },
-
-    totalLoggedHours: {
-        monday: { type: Number, default: 0 },
-        tuesday: { type: Number, default: 0 },
-        wednesday: { type: Number, default: 0 },
-        thursday: { type: Number, default: 0 },
-        friday: { type: Number, default: 0 },
-        saturday: { type: Number, default: 0 },
-        sunday: { type: Number, default: 0 },
-        total: { type: Number, default: 0 }
-    },
-    variance: {
-        monday: { type: Number, default: 0 },
-        tuesday: { type: Number, default: 0 },
-        wednesday: { type: Number, default: 0 },
-        thursday: { type: Number, default: 0 },
-        friday: { type: Number, default: 0 },
-        saturday: { type: Number, default: 0 },
-        sunday: { type: Number, default: 0 },
-        total: { type: Number, default: 0 }
-    },
+    totalBillable: Number,
+    totalNonBillable: Number,
+    totalLogged: Number,
+    totalCapacity: Number,
+    totalVariance: Number,
     submittedAt: Date,
     submittedBy: { type: Schema.Types.ObjectId, ref: 'User' },
 
