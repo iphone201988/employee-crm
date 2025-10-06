@@ -416,6 +416,8 @@ const getTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                 data: timesheet,
                 dropdoenOptionals: { clients, jobs, jobCategories },
                 rate: user?.rate,
+                name: user?.name,
+                avatarUrl: user?.avatarUrl
             });
     } catch (error) {
         console.error("Error in getTimesheet:", error);
@@ -434,7 +436,6 @@ const getAllTimeLogs = async (req: Request, res: Response, next: NextFunction): 
             jobId,
             timeCategoryId,
             userId,
-            companyId,
             billable,
             invoiceStatus,
             startDate,
@@ -444,12 +445,7 @@ const getAllTimeLogs = async (req: Request, res: Response, next: NextFunction): 
         } = req.query;
 
         // Build filter object
-        const filter: any = {};
-
-        // Company filter (required for multi-tenant)
-        if (companyId) {
-            filter.companyId = ObjectId(companyId as string);
-        }
+        const filter: any = {companyId: req.user.companyId};
 
         // Basic filters
         if (clientId) {
@@ -765,5 +761,14 @@ const updateTimeLog = async (req: Request, res: Response, next: NextFunction): P
         next(error);
     }
 };
-
-export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs, addTimeLog };
+const deleteTimeLog = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    const { timeLogIds } = req.body;
+    try {
+        await TimeLogModel.deleteMany({ _id: { $in: timeLogIds } });
+        SUCCESS(res, 200, "Time log deleted successfully", { data: {} });
+    } catch (error) {
+        console.log("error in deleteTimeLog", error);
+        next(error);
+    }
+}
+export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs, addTimeLog, updateTimeLog, deleteTimeLog };

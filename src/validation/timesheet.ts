@@ -311,5 +311,75 @@ const addTimeLogValidation = {
 
     })
 };
+const updateTimeLogValidation = {
+    body: Joi.object({
+        date: Joi.date().optional(),
+        duration: Joi.number()
+            .integer()
+            .optional()
+            .messages({
+                'number.base': 'duration must be a number',
+                'number.integer': 'duration must be an integer',
+            }),
+        rate: Joi.number()
+            .messages({
+                'number.base': 'rate must be a number',
+                'any.required': 'rate is required when isbillable is true'
+            }),
+        billable: Joi.boolean()
+            .messages({
+                'boolean.base': 'Billable must be a boolean',
+                'any.required': 'Billable is required'
+            }),
+        description: Joi.string()
+            .allow('', null)
+            .messages({
+                'string.base': 'description must be a string',
+            }),
+        status: Joi.string()
+            .valid('notInvoiced', "paid", 'invoiced')
+            .messages({
+                'any.only': 'status must be one of: notInvoiced, paid, invoiced'
+            }),
+        clientId: Joi.string()
+            .allow('', null)
+            .messages({
+                'string.base': 'clientId must be a string',
+                'any.required': 'clientId is required when isbillable is false'
+            }),
+        userId: Joi.string()
+            .allow('', null)
+            .messages({
+                'string.base': 'userId must be a string',
+                'any.required': 'userId is required when isbillable is false'
+            }),
+        jobId: Joi.string()
+            .allow('', null)
+            .messages({
+                'string.base': 'jobId must be a string',
+                'any.required': 'jobId is required when isbillable is false'
+            }),
+        jobTypeId: Joi.string()
+            .allow('', null)
+            .messages({
+                'string.base': 'jobTypeId must be a string',
+                'any.required': 'jobTypeId is required when isbillable is false'
+            }),
+        timeCategoryId: Joi.string()
+            .allow('', null)
+            .messages({
+                'string.base': 'timeCategoryId must be a string',
+                'any.required': 'timeCategoryId is required when isbillable is false'
+            }),
+    })
+};
+const deleteTimeLogValidation = {
+    body: Joi.object({
+        timeLogIds: Joi.array().items(Joi.string().pattern(/^[0-9a-fA-F]{24}$/))
+            .messages({
+                'string.pattern': 'timeLogIds must be a valid MongoDB ObjectId',
+            }),
+    })
+};
 
-export default { addTimesheetValidation, addTimeLogValidation };
+export default { addTimesheetValidation, addTimeLogValidation, updateTimeLogValidation, deleteTimeLogValidation };

@@ -10,6 +10,8 @@ timesheetRouter.post("/add", authenticate, validate(timesheetValidation.addTimes
 timesheetRouter.get("/all", authenticate, timesheetController.getAllTimesheets);
 timesheetRouter.get("/logs", authenticate, timesheetController.getAllTimeLogs);
 timesheetRouter.post("/add-time-log", authenticate, validate(timesheetValidation.addTimeLogValidation), timesheetController.addTimeLog);
+timesheetRouter.put("/update-time-log", authenticate, validate(timesheetValidation.updateTimeLogValidation), timesheetController.updateTimeLog);
+timesheetRouter.delete("/delete-time-log", authenticate, validate(timesheetValidation.deleteTimeLogValidation), timesheetController.deleteTimeLog);
 
 
 
