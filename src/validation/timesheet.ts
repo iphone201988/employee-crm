@@ -91,13 +91,13 @@ const addTimesheetValidation = {
                         duration: Joi.number()
                             .integer()
                             .min(1)
-                            .max(1440) // Maximum 24 hours in minutes
+                            .max(3600) // Maximum 24 hours in seconds
                             .required()
                             .messages({
                                 'number.base': 'duration must be a number',
                                 'number.integer': 'duration must be an integer',
                                 'number.min': 'duration must be at least 1 minute',
-                                'number.max': 'duration cannot exceed 1440 minutes (24 hours)',
+                                'number.max': 'duration cannot exceed 3600 seconds (24 hours)',
                                 'any.required': 'duration is required'
                             })
                     })

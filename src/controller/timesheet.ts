@@ -755,4 +755,15 @@ const addTimeLog = async (req: Request, res: Response, next: NextFunction): Prom
         next(error);
     }
 };
+const updateTimeLog = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { timeLogId } = req.params;
+        await TimeLogModel.findByIdAndUpdate(timeLogId, req.body, { new: true });
+        SUCCESS(res, 200, "Time log updated successfully", { data: {} });
+    } catch (error) {
+        console.log("error in updateTimeLog", error);
+        next(error);
+    }
+};
+
 export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs, addTimeLog };
