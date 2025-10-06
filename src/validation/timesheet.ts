@@ -29,6 +29,10 @@ const addTimesheetValidation = {
 
         timeEntries: Joi.array().items(
             Joi.object({
+                _id: Joi.string().pattern(/^[0-9a-fA-F]{24}$/)
+                    .messages({
+                        'string.pattern': 'clientId must be a valid MongoDB ObjectId',
+                    }),
                 clientId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required()
                     .messages({
                         'string.pattern': 'clientId must be a valid MongoDB ObjectId',
@@ -192,7 +196,7 @@ const addTimesheetValidation = {
                 'number.base': 'totalBillable must be a number',
                 'number.integer': 'totalBillable must be an integer',
                 'number.min': 'totalBillable cannot be negative',
-                
+
             }),
 
         totalNonBillable: Joi.number()
@@ -224,15 +228,88 @@ const addTimesheetValidation = {
 
         totalVariance: Joi.number()
             .integer()
-            
+
             .messages({
                 'number.base': 'totalVariance must be a number',
                 'number.integer': 'totalVariance must be an integer',
-                
+
+            }),
+
+    })
+};
+const addTimeLogValidation = {
+    body: Joi.object({
+        date: Joi.date().required()
+            .messages({
+                'date.base': 'log date must be a valid date',
+                'any.required': 'log date is required'
+            }),
+
+        duration: Joi.number()
+            .integer()
+            .required()
+            .messages({
+                'number.base': 'duration must be a number',
+                'number.integer': 'duration must be an integer',
+                'any.required': 'duration is required'
+            }),
+
+        rate: Joi.number()
+            .messages({
+                'number.base': 'rate must be a number',
+                'any.required': 'rate is required when isbillable is true'
+            }),
+        billable: Joi.boolean()
+            .messages({
+                'boolean.base': 'Billable must be a boolean',
+                'any.required': 'Billable is required'
+            }),
+        description: Joi.string()
+            .allow('', null)
+            .messages({
+                'string.base': 'description must be a string',
+            }),
+
+        jobId: Joi.string()
+            .allow('', null)
+            .messages({
+                'string.base': 'jobId must be a string',
+                'any.required': 'jobId is required when isbillable is false'
+            }),
+        jobTypeId: Joi.string()
+            .allow('', null)
+            .messages({
+                'string.base': 'jobTypeId must be a string',
+                'any.required': 'jobTypeId is required when isbillable is false'
+            }),
+
+        timeCategoryId: Joi.string()
+            .allow('', null)
+            .messages({
+                'string.base': 'timeCategoryId must be a string',
+                'any.required': 'timeCategoryId is required when isbillable is false'
+            }),
+
+        clientId: Joi.string()
+            .allow('', null)
+            .messages({
+                'string.base': 'clientId must be a string',
+                'any.required': 'clientId is required when isbillable is false'
+            }),
+        userId: Joi.string()
+            .allow('', null)
+            .messages({
+                'string.base': 'userId must be a string',
+                'any.required': 'userId is required when isbillable is false'
+            }),
+        status: Joi.string()
+            .valid('notInvoiced', "paid", 'invoiced')
+            .default('notInvoiced')
+            .messages({
+                'any.only': 'status must be one of: notInvoiced, paid, invoiced'
             }),
 
     })
 };
 
-
-export default { addTimesheetValidation, };
+export default { addTimesheetValidation, addTimeLogValidation };

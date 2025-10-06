@@ -10,7 +10,7 @@ export interface IUser extends Document {
     role: 'superadmin' | 'admin' | 'team';
     departmentId: mongoose.Types.ObjectId;
     hourlyRate: number;
-    billableRate: number;
+    rate: number;
     workSchedule: {
         monday: {
             type: Number,
@@ -91,7 +91,7 @@ const userSchema = new Schema<IUser>({
         type: Number,
         default: 0,
     },
-    billableRate: {
+    rate: {
         type: Number,
         default: 0,
     },

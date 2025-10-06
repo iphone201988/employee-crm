@@ -2,16 +2,19 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ITimeLog extends Document {
     date: Date;
+    companyId: Schema.Types.ObjectId;
+    timeEntrieId: Schema.Types.ObjectId;
     clientId: Schema.Types.ObjectId;
     jobId: Schema.Types.ObjectId;
+    jobTypeId: Schema.Types.ObjectId;
     timeCategoryId: Schema.Types.ObjectId;
-    teamName: string;
+    userId: Schema.Types.ObjectId; 
     description: string;
-    timePurpose: string;
     billable: boolean;
-    duration: string;  // You might store this as a string or in a specific time format
-    billableRate: number;
-    status: 'Not Invoiced' | 'Invoiced' | 'Paid';
+    duration: number;  
+    rate: number;
+    invoiceStatus: string;
+    amount: number;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -20,6 +23,15 @@ const TimeLogSchema: Schema = new Schema<ITimeLog>(
     {
         date: {
             type: Date,
+            required: true,
+        },
+        timeEntrieId: {
+            type: Schema.Types.ObjectId,
+            ref: 'TimeEntry',
+        },
+        companyId: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
             required: true,
         },
         clientId: {
@@ -32,24 +44,22 @@ const TimeLogSchema: Schema = new Schema<ITimeLog>(
             ref: 'Job',
             required: true,
         },
+        jobTypeId: {
+            type: Schema.Types.ObjectId,
+            ref: 'JobCategory',
+        },
         timeCategoryId: {
             type: Schema.Types.ObjectId,
             ref: 'TimeCategory',
             required: true,
         },
-        teamName: {
-            type: String,
+        userId: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
             required: true,
-            trim: true,
         },
         description: {
             type: String,
-            required: true,
-            trim: true,
-        },
-        timePurpose: {
-            type: String,
-            required: true,
             trim: true,
         },
         billable: {
@@ -57,22 +67,27 @@ const TimeLogSchema: Schema = new Schema<ITimeLog>(
             required: true,
         },
         duration: {
-            type: String,
-            required: true, // You can change this to a time type or a specific duration format if needed
+            type: Number,
+            required: true, 
         },
-        billableRate: {
+        rate: {
             type: Number,
             required: true,
             min: 0,
         },
-        status: {
+        amount: {
+            type: Number,
+            min: 0,
+            default: 0
+
+        },
+        invoiceStatus: {
             type: String,
-            enum: ['Not Invoiced', 'Invoiced', 'Paid'],
-            default: 'Not Invoiced',
+            enum: ['notInvoiced', 'invoiced', 'paid'],
         },
     },
     {
-        timestamps: true, // Automatically adds createdAt and updatedAt fields
+        timestamps: true, 
     }
 );
 

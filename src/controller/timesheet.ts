@@ -3,11 +3,12 @@ import { NextFunction, Request, Response } from "express";
 import { SUCCESS } from "../utils/response";
 import { TimesheetModel } from "../models/Timesheet";
 import { BadRequestError } from "../utils/errors";
-import { findUserById, ObjectId } from "../utils/utills";
+import { calculateEarnings, findUserById, ObjectId } from "../utils/utills";
 import { TimeEntryModel } from "../models/TimeEntry";
 import { ClientModel } from "../models/Client";
 import { JobModel } from "../models/Job";
 import { JobCategoryModel } from "../models/JobCategory";
+import { TimeLogModel } from "../models/TImeLog";
 
 const addTimesheet = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -28,7 +29,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                 timeEntry.timesheetId = timesheet._id;
                 timeEntry.userId = timesheet?.userId || userId;
                 timeEntry.companyId = timesheet?.companyId || companyId;
-
+                const job = await JobModel.findById(timeEntry.jobId);
                 // Use proper filter for upsert
                 const data = await TimeEntryModel.findOneAndUpdate(
                     {
@@ -40,13 +41,43 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                     timeEntry,
                     {
                         upsert: true,
-                        new: true // Return the updated/created document
+                        new: true
                     }
-                );
 
+                );
+                const logs = timeEntry?.logs || [];
+                for (const log of logs) {
+                    const addedLog = {
+                        userId: timesheet?.userId || userId,
+                        timeEntrieId: data._id,
+                        clientId: timeEntry.clientId,
+                        jobId: timeEntry.jobId,
+                        jobTypeId: job?.jobTypeId,
+                        timeCategoryId: timeEntry.timeCategoryId,
+                        date: log.date,
+                        description: timeEntry.description,
+                        billable: timeEntry.billable,
+                        duration: log.duration,
+                        rate: timeEntry.rate,
+                        amount: calculateEarnings(log.duration, timeEntry.rate),
+                    }
+                    await TimeLogModel.findOneAndUpdate({
+                        userId: timesheet?.userId || userId,
+                        timeEntrieId: data._id,
+                        clientId: timeEntry.clientId,
+                        jobId: timeEntry.jobId,
+                        timeCategoryId: timeEntry.timeCategoryId,
+                        billable: timeEntry.billable,
+                        date: log.date
+                    }, addedLog, {
+                        upsert: true,
+                        new: true
+                    });
+                }
                 if (data) {
                     timeEntriesIds.push(data._id);
                 }
+
             }
         }
 
@@ -368,13 +399,344 @@ const getTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
             {
                 data: timesheet,
                 dropdoenOptionals: { clients, jobs, jobCategories },
-                billableRate: user?.billableRate,
+                rate: user?.rate,
             });
     } catch (error) {
         console.error("Error in getTimesheet:", error);
         next(error);
     }
 };
+const getAllTimeLogs = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        // Extract query parameters with proper typing
+        const {
+            page = 1,
+            limit = 10,
+            sortBy = 'date',
+            sortOrder = 'desc',
+            clientId,
+            jobId,
+            timeCategoryId,
+            userId,
+            companyId,
+            billable,
+            invoiceStatus,
+            startDate,
+            endDate,
+            search,
+            groupBy = 'none' // none, clientName, teamName, jobType, jobName, category
+        } = req.query;
 
+        // Build filter object
+        const filter: any = {};
 
-export default { addTimesheet, getAllTimesheets, getTimesheet };
+        // Company filter (required for multi-tenant)
+        if (companyId) {
+            filter.companyId = ObjectId(companyId as string);
+        }
+
+        // Basic filters
+        if (clientId) {
+            filter.clientId = ObjectId(clientId as string);
+        }
+
+        if (jobId) {
+            filter.jobId = ObjectId(jobId as string);
+        }
+
+        if (timeCategoryId) {
+            filter.timeCategoryId = ObjectId(timeCategoryId as string);
+        }
+
+        if (userId) {
+            filter.userId = ObjectId(userId as string);
+        }
+
+        // Boolean filter for billable
+        if (billable !== undefined) {
+            filter.billable = billable === 'true';
+        }
+
+        // Enum filter for invoice status
+        if (invoiceStatus) {
+            filter.invoiceStatus = invoiceStatus;
+        }
+
+        // Date range filter
+        if (startDate || endDate) {
+            filter.date = {};
+            if (startDate) {
+                filter.date.$gte = new Date(startDate as string);
+            }
+            if (endDate) {
+                filter.date.$lte = new Date(endDate as string);
+            }
+        }
+
+        // Search functionality
+        if (search) {
+            filter.description = {
+                $regex: search,
+                $options: 'i' // case insensitive
+            };
+        }
+
+        // Pagination setup
+        const pageNum = parseInt(page as string) || 1;
+        const limitNum = parseInt(limit as string) || 10;
+        const skip = (pageNum - 1) * limitNum;
+
+        // Sort setup
+        const sortObj: any = {};
+        sortObj[sortBy as string] = sortOrder === 'desc' ? -1 : 1;
+
+        // Base aggregation pipeline
+        let pipeline: any[] = [
+            { $match: filter },
+            {
+                $lookup: {
+                    from: 'clients',
+                    localField: 'clientId',
+                    foreignField: '_id',
+                    as: 'client',
+                    pipeline: [
+                        { $project: { _id: 1, name: 1, clientRef: 1 } }
+                    ]
+                }
+            },
+            {
+                $lookup: {
+                    from: 'jobs',
+                    localField: 'jobId',
+                    foreignField: '_id',
+                    as: 'job',
+                    pipeline: [
+                        { $project: { _id: 1, name: 1, jobTypeId: 1 } }
+                    ]
+                }
+            },
+            {
+                $lookup: {
+                    from: 'jobcategories',
+                    localField: 'jobTypeId',
+                    foreignField: '_id',
+                    as: 'jobCategory',
+                    pipeline: [
+                        { $project: { _id: 1, name: 1, } }
+                    ]
+                }
+            },
+            {
+                $lookup: {
+                    from: 'timecategories',
+                    localField: 'timeCategoryId',
+                    foreignField: '_id',
+                    as: 'timeCategory',
+                    pipeline: [
+                        { $project: { _id: 1, name: 1 } }
+                    ]
+                }
+            },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'userId',
+                    foreignField: '_id',
+                    as: 'user',
+                    pipeline: [
+                        { $project: { _id: 1, name: 1, avatarUrl: 1 } }
+                    ]
+                }
+            },
+            {
+                $lookup: {
+                    from: 'timeentries',
+                    localField: 'timeEntrieId',
+                    foreignField: '_id',
+                    as: 'timeEntry'
+                }
+            },
+            {
+                $addFields: {
+                    client: { $arrayElemAt: ['$client', 0] },
+                    job: { $arrayElemAt: ['$job', 0] },
+                    jobCategory: { $arrayElemAt: ['$jobCategory', 0] },
+                    timeCategory: { $arrayElemAt: ['$timeCategory', 0] },
+                    user: { $arrayElemAt: ['$user', 0] },
+                    timeEntry: { $arrayElemAt: ['$timeEntry', 0] },
+                    // Convert duration from minutes to hours for display
+                    // durationHours: { $divide: ['$duration', 60] }
+                }
+            }
+        ];
+
+        // Group by logic based on query parameter
+        if (groupBy !== 'none') {
+            let groupKey: any = {};
+
+            switch (groupBy) {
+                case 'clientName':
+                    groupKey = {
+                        clientId: '$clientId',
+                        clientName: '$client.name'
+                    };
+                    break;
+                case 'teamName':
+                    groupKey = {
+                        teamId: '$user.teamId',
+                        teamName: '$user.teamName'
+                    };
+                    break;
+                case 'jobType':
+                    groupKey = {
+                        jobType: '$job.type',
+                        jobTypeName: '$job.typeName'
+                    };
+                    break;
+                case 'jobName':
+                    groupKey = {
+                        jobId: '$jobId',
+                        jobName: '$job.name'
+                    };
+                    break;
+                case 'category':
+                    groupKey = {
+                        categoryId: '$timeCategoryId',
+                        categoryName: '$timeCategory.name'
+                    };
+                    break;
+            }
+
+            pipeline.push({
+                $group: {
+                    _id: groupKey,
+                    totalHours: { $sum: '$durationHours' },
+                    totalBillableHours: {
+                        $sum: {
+                            $cond: ['$billable', '$durationHours', 0]
+                        }
+                    },
+                    totalNonBillableHours: {
+                        $sum: {
+                            $cond: ['$billable', 0, '$durationHours']
+                        }
+                    },
+                    totalAmount: { $sum: '$amount' },
+                    logCount: { $sum: 1 },
+                    logs: { $push: '$$ROOT' }
+                }
+            });
+        }
+
+        // Get total count for pagination
+        const countPipeline = [...pipeline];
+        countPipeline.push({ $count: 'total' });
+
+        const countResult = await TimeLogModel.aggregate(countPipeline);
+        const totalRecords = countResult[0]?.total || 0;
+
+        // Add pagination and sorting to main pipeline
+        if (groupBy === 'none') {
+            pipeline.push(
+                { $sort: sortObj },
+                { $skip: skip },
+                { $limit: limitNum }
+            );
+        } else {
+            pipeline.push(
+                { $sort: { totalHours: -1 } }, // Sort groups by total hours
+                { $skip: skip },
+                { $limit: limitNum }
+            );
+        }
+
+        // Execute main query
+        const timeLogs = await TimeLogModel.aggregate(pipeline);
+
+        // Calculate summary statistics
+        const summaryPipeline = [
+            { $match: filter },
+            {
+                $group: {
+                    _id: null,
+                    totalHours: { $sum: { $divide: ['$duration', 60] } },
+                    totalBillableHours: {
+                        $sum: {
+                            $cond: ['$billable', { $divide: ['$duration', 60] }, 0]
+                        }
+                    },
+                    totalAmount: { $sum: '$amount' },
+                    uniqueClients: { $addToSet: '$clientId' },
+                    uniqueJobs: { $addToSet: '$jobId' },
+                    totalLogs: { $sum: 1 }
+                }
+            },
+            {
+                $addFields: {
+                    uniqueClientsCount: { $size: '$uniqueClients' },
+                    uniqueJobsCount: { $size: '$uniqueJobs' },
+                    totalNonBillableHours: { $subtract: ['$totalHours', '$totalBillableHours'] }
+                }
+            }
+        ];
+
+        const summaryResult = await TimeLogModel.aggregate(summaryPipeline);
+        const summary = summaryResult[0] || {
+            totalHours: 0,
+            totalBillableHours: 0,
+            totalNonBillableHours: 0,
+            totalAmount: 0,
+            uniqueClientsCount: 0,
+            uniqueJobsCount: 0,
+            totalLogs: 0
+        };
+
+        // Calculate pagination info
+        const totalPages = Math.ceil(totalRecords / limitNum);
+
+     
+
+        SUCCESS(res, 200, "Time logs fetched successfully",  {
+            timeLogs,
+            summary: {
+                totalHours: parseFloat(summary.totalHours.toFixed(2)),
+                totalAmount: parseFloat(summary.totalAmount.toFixed(2)),
+                uniqueClients: summary.uniqueClientsCount,
+                uniqueJobs: summary.uniqueJobsCount,
+                totalLogs: summary.totalLogs,
+                billableHours: parseFloat(summary.totalBillableHours.toFixed(2)),
+                nonBillableHours: parseFloat(summary.totalNonBillableHours.toFixed(2))
+            },
+            pagination: {
+                currentPage: pageNum,
+                totalPages,
+                totalRecords,
+                limit: limitNum,
+            },
+            filters: {
+                appliedFilters: filter,
+                groupBy,
+                sortBy,
+                sortOrder
+            }
+        },);
+
+    } catch (error) {
+        console.error("Error in getAllTimeLogs:", error);
+        next(error);
+    }
+};
+
+const addTimeLog = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        req.body.userId = req.userId;
+        req.body.companyId = req.user.companyId;
+        if(req.body.duration && req.body.rate) req.body.amount = calculateEarnings(req.body.duration, req.body.rate);
+        await TimeLogModel.create(req.body);
+        SUCCESS(res, 200, "Time log added successfully", { data: {} });
+    } catch (error) {
+        console.log("error in addTimeLog", error);
+        next(error);
+    }
+};
+export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs,addTimeLog };
