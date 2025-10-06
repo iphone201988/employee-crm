@@ -16,7 +16,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
         const companyId = req.user.companyId;
         const { weekStart, weekEnd, timeEntries, isbillable, ...otherData } = req.body;
 
-        let timesheet = await TimesheetModel.findOne({ weekStart, weekEnd, userId, isbillable });
+        let timesheet = await TimesheetModel.findOne({ weekStart, weekEnd, userId });
         if (timesheet) {
             Object.assign(timesheet, otherData);
         } else {
@@ -59,7 +59,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                         billable: timeEntry.billable,
                         duration: log.duration,
                         rate: timeEntry.rate,
-                        amount: calculateEarnings(log.duration, timeEntry.rate),
+                        amount: calculateEarnings(log.duration, timeEntry.rate) ,
                     }
                     await TimeLogModel.findOneAndUpdate({
                         userId: timesheet?.userId || userId,

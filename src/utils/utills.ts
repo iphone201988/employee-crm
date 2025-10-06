@@ -80,7 +80,7 @@ export const ObjectId =(id:any) => new mongoose.Types.ObjectId(id);
 
 export function calculateEarnings(seconds:number, hourlyRate:number) {
     const hours = seconds / 3600;  // Convert seconds to hours
-    const earnings = hours * hourlyRate;  // Calculate earnings
+    const earnings = hours * hourlyRate || 0;  // Calculate earnings
     console.log('Earnings:', earnings);
     return earnings;
 }
