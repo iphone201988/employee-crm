@@ -30,21 +30,37 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                 timeEntry.userId = timesheet?.userId || userId;
                 timeEntry.companyId = timesheet?.companyId || companyId;
                 const job = await JobModel.findById(timeEntry.jobId);
+                const timeEntrieId = timeEntry?._id;
                 // Use proper filter for upsert
-                const data = await TimeEntryModel.findOneAndUpdate(
-                    {
-                        timesheetId: timesheet._id,
-                        clientId: timeEntry.clientId,
-                        jobId: timeEntry.jobId,
-                        timeCategoryId: timeEntry.timeCategoryId
-                    },
-                    timeEntry,
-                    {
-                        upsert: true,
-                        new: true
-                    }
+                delete timeEntry._id;
+                let data: any ;
+                if (timeEntrieId) {
+                    data = await TimeEntryModel.findByIdAndUpdate(
+                        timeEntrieId,
+                        timeEntry,
+                        {
+                            upsert: true,
+                            new: true
+                        }
 
-                );
+                    );
+                } else {
+                    data = await TimeEntryModel.findOneAndUpdate(
+                        {
+                            timesheetId: timesheet._id,
+                            clientId: timeEntry.clientId,
+                            jobId: timeEntry.jobId,
+                            timeCategoryId: timeEntry.timeCategoryId
+                        },
+                        timeEntry,
+                        {
+                            upsert: true,
+                            new: true
+                        }
+
+                    );
+                }
+
                 const logs = timeEntry?.logs || [];
                 for (const log of logs) {
                     const addedLog = {
@@ -59,7 +75,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                         billable: timeEntry.billable,
                         duration: log.duration,
                         rate: timeEntry.rate,
-                        amount: calculateEarnings(log.duration, timeEntry.rate) ,
+                        amount: calculateEarnings(log.duration, timeEntry.rate),
                     }
                     await TimeLogModel.findOneAndUpdate({
                         userId: timesheet?.userId || userId,
@@ -694,9 +710,9 @@ const getAllTimeLogs = async (req: Request, res: Response, next: NextFunction): 
         // Calculate pagination info
         const totalPages = Math.ceil(totalRecords / limitNum);
 
-     
 
-        SUCCESS(res, 200, "Time logs fetched successfully",  {
+
+        SUCCESS(res, 200, "Time logs fetched successfully", {
             timeLogs,
             summary: {
                 totalHours: parseFloat(summary.totalHours.toFixed(2)),
@@ -731,7 +747,7 @@ const addTimeLog = async (req: Request, res: Response, next: NextFunction): Prom
     try {
         req.body.userId = req.userId;
         req.body.companyId = req.user.companyId;
-        if(req.body.duration && req.body.rate) req.body.amount = calculateEarnings(req.body.duration, req.body.rate);
+        if (req.body.duration && req.body.rate) req.body.amount = calculateEarnings(req.body.duration, req.body.rate);
         await TimeLogModel.create(req.body);
         SUCCESS(res, 200, "Time log added successfully", { data: {} });
     } catch (error) {
@@ -739,4 +755,4 @@ const addTimeLog = async (req: Request, res: Response, next: NextFunction): Prom
         next(error);
     }
 };
-export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs,addTimeLog };
+export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs, addTimeLog };
