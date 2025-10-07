@@ -23,4 +23,8 @@ userRouter.get("/get-all-company-members", authenticate, teamController.getAllCo
 userRouter.get("/get-all-company-members/:companyId", authenticate, teamController.getCompanyById);
 userRouter.get("/get-all-company-members/:companyId/team-members", authenticate, teamController.companyTeamMembers);
 
+
+// setting 
+userRouter.post("/update-settings", authenticate, validate(userValidation.updateSettingsValidation), teamController.updateSettings);
+
 export default userRouter;

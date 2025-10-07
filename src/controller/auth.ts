@@ -80,6 +80,14 @@ const profile = async (req: Request, res: Response, next: NextFunction): Promise
                     path: "$features",
                     preserveNullAndEmptyArrays: true,
                 },
+            },
+            {
+                $lookup:{
+                    from: "settings",
+                    localField: "companyId",
+                    foreignField: "companyId",
+                    as: "settings"
+                }
             },{
                 $project: {
                     password: 0

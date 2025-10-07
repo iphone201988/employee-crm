@@ -9,14 +9,18 @@ import { ClientModel } from "../models/Client";
 import { JobModel } from "../models/Job";
 import { JobCategoryModel } from "../models/JobCategory";
 import { TimeLogModel } from "../models/TImeLog";
+import { SettingModel } from "../models/Setting";
 
 const addTimesheet = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const userId = req.userId;
         const companyId = req.user.companyId;
         const { weekStart, weekEnd, timeEntries, isbillable, ...otherData } = req.body;
-
+        const setting = await SettingModel.findOne({ companyId });
         let timesheet = await TimesheetModel.findOne({ weekStart, weekEnd, userId });
+        if(setting && setting.autoApproveTimesheets) {
+            otherData.status = "autoApproved";
+        }
         if (timesheet) {
             Object.assign(timesheet, otherData);
         } else {
@@ -245,6 +249,7 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                         $switch: {
                             branches: [
                                 { case: { $eq: ['$status', 'approved'] }, then: 'Approved' },
+                                { case: { $eq: ['$status', 'autoApproved'] }, then: 'Auto Approved' },
                                 { case: { $eq: ['$status', 'rejected'] }, then: 'Rejected' },
                                 { case: { $eq: ['$status', 'submitted'] }, then: 'For Review' },
                                 { case: { $eq: ['$status', 'reviewed'] }, then: 'For Review' },
@@ -331,6 +336,7 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
             forReview: 0,
             rejected: 0,
             approved: 0,
+            autoApproved: 0,
             draft: 0,
             totalHours: 0,
             totalBillableHours: 0
@@ -350,6 +356,8 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                 case 'Approved':
                     summary.approved = item.count;
                     break;
+                case 'Auto Approved':
+                    summary.autoApproved += item.count;
                 case 'Not Submitted':
                     summary.draft = item.count;
                     break;
@@ -771,5 +779,31 @@ const deleteTimeLog = async (req: Request, res: Response, next: NextFunction): P
         console.log("error in deleteTimeLog", error);
         next(error);
     }
-}
+};
+const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { timeSheetId, status } = req.body;
+       const update: any= { };
+
+        if(status == "reviewed"){
+            update.status = "reviewed";
+            update.reviewedAt = new Date().toISOString().slice(0, 10);
+            update.reviewedBy = req.userId
+        }else if(status == "approved"){
+            update.status = "approved";
+            update.approvedBy = req.userId
+            update.approvedAt = new Date().toISOString().slice(0, 10);
+        }else if(status == "rejected"){
+            update.status = "rejected";
+            update.rejectedAt = new Date().toISOString().slice(0, 10);
+            update.rejectedBy = req.userId
+        }
+        await TimesheetModel.findByIdAndUpdate(timeSheetId, req.body, { new: true });
+        SUCCESS(res, 200, "Time log updated successfully", { data: {} });
+    } catch (error) {
+        console.log("error in updateTimeLog", error);
+        next(error);
+    }
+};
+
 export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs, addTimeLog, updateTimeLog, deleteTimeLog };

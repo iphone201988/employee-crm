@@ -308,13 +308,24 @@ const addCompanyValidation = {
     }),
     avatarUrl: Joi.string().allow(null).optional(),
   }),
-}
+};
+ const updateSettingsValidation = {
+   body: Joi.object({
+     autoApproveTimesheets: Joi.boolean().optional().messages({
+       "boolean.base": "Auto approve timesheets must be a boolean",
+     }),
+     wipWarningPercentage: Joi.number().integer().min(0).optional().messages({
+       "number.base": "WIP warning percentage must be a number",
+     }),
+   }),
+ }
 export default {
   addTeamMemberValidation,
   sendInviteToTeamMemberValidation,
   updateTeamMembersValidation,
   setPasswordValidation,
   getAccessOftabsValidation,
-  addCompanyValidation
+  addCompanyValidation,
+  updateSettingsValidation
 
 };

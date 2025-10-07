@@ -14,6 +14,7 @@ import { TimeCategoryModel } from "../models/TimeCategory";
 import { BusinessCategoryModel } from "../models/BusinessCategory";
 import { ClientModel } from "../models/Client";
 import { JobModel } from "../models/Job";
+import { SettingModel } from "../models/Setting";
 
 const uploadImage = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -394,6 +395,7 @@ const addCompany = async (req: Request, res: Response, next: NextFunction): Prom
             timeLogsImport: true,
             integrations: true,
         });
+        await SettingModel.create({ companyId: member._id });
         SUCCESS(res, 200, "Member added successfully", { data: {} });
     } catch (error) {
         console.log("error in add company", error);
@@ -559,5 +561,14 @@ const companyTeamMembers = async (req: Request, res: Response, next: NextFunctio
         next(error);
     }
 };
-
-export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions, getAccessOftabs, addCompany, getAllCompanyMembers, getCompanyById, companyTeamMembers };
+const updateSettings = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const companyId = req.user.companyId;
+        await SettingModel.updateOne({ companyId }, { $set: req.body });
+        SUCCESS(res, 200, "Settings updated successfully", { data: {} });
+    } catch (error) {
+        console.log("error in updateSettings", error);
+        next(error);
+    }
+};
+export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions, getAccessOftabs, addCompany, getAllCompanyMembers, getCompanyById, companyTeamMembers, updateSettings };
