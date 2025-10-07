@@ -788,7 +788,9 @@ const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunc
         if(status == "reviewed"){
             update.status = "reviewed";
             update.reviewedAt = new Date().toISOString().slice(0, 10);
+            update.submittedAt = new Date().toISOString().slice(0, 10);
             update.reviewedBy = req.userId
+            update.submittedBy = req.userId
         }else if(status == "approved"){
             update.status = "approved";
             update.approvedBy = req.userId
@@ -797,7 +799,7 @@ const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunc
             update.status = "rejected";
             update.rejectedAt = new Date().toISOString().slice(0, 10);
             update.rejectedBy = req.userId
-        }
+        } 
         await TimesheetModel.findByIdAndUpdate(timeSheetId, req.body, { new: true });
         SUCCESS(res, 200, "Time log updated successfully", { data: {} });
     } catch (error) {
@@ -806,4 +808,4 @@ const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunc
     }
 };
 
-export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs, addTimeLog, updateTimeLog, deleteTimeLog };
+export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs, addTimeLog, updateTimeLog, deleteTimeLog , chanegTimeSheetStatus};

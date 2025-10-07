@@ -381,5 +381,18 @@ const deleteTimeLogValidation = {
             }),
     })
 };
+const changeTimeSheetStatusValidation = {
+    body: Joi.object({
+        timeSheetId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/)
+            .messages({
+                'string.pattern': 'timeSheetId must be a valid MongoDB ObjectId',
+            }),
+        status: Joi.string()
+            .valid("rejected", "approved", "reviewed")
+            .messages({
+                'any.only': 'status must be one of: notInvoiced, paid, invoiced'
+            }),
+    })
+};
 
-export default { addTimesheetValidation, addTimeLogValidation, updateTimeLogValidation, deleteTimeLogValidation };
+export default { addTimesheetValidation, addTimeLogValidation, updateTimeLogValidation, deleteTimeLogValidation, changeTimeSheetStatusValidation };
