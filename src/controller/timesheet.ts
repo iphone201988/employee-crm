@@ -66,6 +66,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                     const addedLog = {
                         userId: timesheet?.userId || userId,
                         timeEntrieId: data._id,
+                        companyId: companyId,
                         clientId: timeEntry.clientId,
                         jobId: timeEntry.jobId,
                         jobTypeId: job?.jobTypeId,
