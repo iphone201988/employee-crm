@@ -54,6 +54,9 @@ const updateTeamMembersValidation = {
         timeLogs: Joi.boolean().optional().messages({
           "boolean.base": "Time logs must be a boolean",
         }),
+        myTimeLogs: Joi.boolean().optional().messages({
+          "boolean.base": "My time logs must be a boolean",
+        }),
         WIP: Joi.boolean().optional().messages({
           "boolean.base": "WIP must be a boolean",
         }),
@@ -186,6 +189,9 @@ const updateTeamMembersValidation = {
       }),
       editJobTemplates: Joi.boolean().optional().messages({
         "boolean.base": "Edit job templates must be a boolean",
+      }),
+      bulkDeleteLogs: Joi.boolean().optional().messages({
+        "boolean.base": "Bulk delete logs must be a boolean",
       }),
     })),
     blukWeeklyHours: Joi.array().items(Joi.object({

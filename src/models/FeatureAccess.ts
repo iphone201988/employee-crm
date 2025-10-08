@@ -9,6 +9,7 @@ export interface IFeatureAccess extends Document {
   myTimesheet: boolean;
   allTimesheets: boolean;
   timeLogs: boolean;
+  myTimeLogs: boolean;
 
   // WIP & Debtors
   WIP: boolean;
@@ -57,6 +58,7 @@ const featureAccessSchema = new Schema<IFeatureAccess>({
   myTimesheet: { type: Boolean, default: true },
   allTimesheets: { type: Boolean, default: false },
   timeLogs: { type: Boolean, default: false },
+  myTimeLogs: { type: Boolean, default: false },
 
   // WIP & Debtors
   WIP: { type: Boolean, default: false },

@@ -394,5 +394,35 @@ const changeTimeSheetStatusValidation = {
             }),
     })
 };
+const addNoteValidation = {
+    body: Joi.object({
+        note: Joi.string().required()
+            .messages({
+                'string.base': 'note must be a string',
+                'any.required': 'note is required'
+            }),
+        timesheetId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required()
+            .messages({
+                'string.pattern': 'timesheetId must be a valid MongoDB ObjectId',
+                'any.required': 'timesheetId is required'
+            }),
+    })
+};
+const updateNoteValidation = {
+    params: Joi.object({
+        noteId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required()
+            .messages({
+                'string.pattern': 'noteId must be a valid MongoDB ObjectId',
+                'any.required': 'noteId is required'
+            }),
+    }),
+    body: Joi.object({
+        note: Joi.string().required()
+            .messages({
+                'string.base': 'note must be a string',
+                'any.required': 'note is required'
+            }),
+    })
+};
 
-export default { addTimesheetValidation, addTimeLogValidation, updateTimeLogValidation, deleteTimeLogValidation, changeTimeSheetStatusValidation };
+export default { addTimesheetValidation, addTimeLogValidation, updateTimeLogValidation, deleteTimeLogValidation, changeTimeSheetStatusValidation, addNoteValidation, updateNoteValidation };

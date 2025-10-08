@@ -346,6 +346,7 @@ const addCompany = async (req: Request, res: Response, next: NextFunction): Prom
             editServices: true,
             editJobBuilder: true,
             editJobTemplates: true,
+            bulkDeleteLogs: true,
         });
         await FeatureAccessModel.create({
             userId: member._id,
@@ -355,6 +356,7 @@ const addCompany = async (req: Request, res: Response, next: NextFunction): Prom
             myTimesheet: true,
             allTimesheets: true,
             timeLogs: true,
+            myTimeLogs: true,
 
             // WIP & Debtors
             WIP: true,

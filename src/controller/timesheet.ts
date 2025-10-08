@@ -10,6 +10,7 @@ import { JobModel } from "../models/Job";
 import { JobCategoryModel } from "../models/JobCategory";
 import { TimeLogModel } from "../models/TImeLog";
 import { SettingModel } from "../models/Setting";
+import { NotesModel } from "../models/Notes";
 
 const addTimesheet = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -18,7 +19,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
         const { weekStart, weekEnd, timeEntries, isbillable, ...otherData } = req.body;
         const setting = await SettingModel.findOne({ companyId });
         let timesheet = await TimesheetModel.findOne({ weekStart, weekEnd, userId });
-        if(setting && setting.autoApproveTimesheets) {
+        if (setting && setting.autoApproveTimesheets) {
             otherData.status = "autoApproved";
         }
         if (timesheet) {
@@ -37,7 +38,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                 const timeEntrieId = timeEntry?._id;
                 // Use proper filter for upsert
                 delete timeEntry._id;
-                let data: any ;
+                let data: any;
                 if (timeEntrieId) {
                     data = await TimeEntryModel.findByIdAndUpdate(
                         timeEntrieId,
@@ -454,7 +455,7 @@ const getAllTimeLogs = async (req: Request, res: Response, next: NextFunction): 
         } = req.query;
 
         // Build filter object
-        const filter: any = {companyId: req.user.companyId};
+        const filter: any = { companyId: req.user.companyId };
 
         // Basic filters
         if (clientId) {
@@ -783,23 +784,23 @@ const deleteTimeLog = async (req: Request, res: Response, next: NextFunction): P
 const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const { timeSheetId, status } = req.body;
-       const update: any= { };
+        const update: any = {};
 
-        if(status == "reviewed"){
+        if (status == "reviewed") {
             update.status = "reviewed";
             update.reviewedAt = new Date().toISOString().slice(0, 10);
             update.submittedAt = new Date().toISOString().slice(0, 10);
             update.reviewedBy = req.userId
             update.submittedBy = req.userId
-        }else if(status == "approved"){
+        } else if (status == "approved") {
             update.status = "approved";
             update.approvedBy = req.userId
             update.approvedAt = new Date().toISOString().slice(0, 10);
-        }else if(status == "rejected"){
+        } else if (status == "rejected") {
             update.status = "rejected";
             update.rejectedAt = new Date().toISOString().slice(0, 10);
             update.rejectedBy = req.userId
-        } 
+        }
         await TimesheetModel.findByIdAndUpdate(timeSheetId, req.body, { new: true });
         SUCCESS(res, 200, "Time log updated successfully", { data: {} });
     } catch (error) {
@@ -808,4 +809,34 @@ const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunc
     }
 };
 
-export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs, addTimeLog, updateTimeLog, deleteTimeLog , chanegTimeSheetStatus};
+const addNote = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const note = await NotesModel.create(req.body);
+        SUCCESS(res, 200, "Time log updated successfully", { data: {} });
+    } catch (error) {
+        console.log("error in updateTimeLog", error);
+        next(error);
+    }
+};
+const updateNote = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { noteId } = req.params;
+        await NotesModel.findByIdAndUpdate(noteId, req.body, { new: true });
+        SUCCESS(res, 200, "Time log updated successfully", { data: {} });
+    } catch (error) {
+        console.log("error in updateTimeLog", error);
+        next(error);
+    }
+};
+const deleteNote = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { noteId } = req.params;
+        await NotesModel.findByIdAndDelete(noteId);
+        SUCCESS(res, 200, "Time log updated successfully", { data: {} });
+    } catch (error) {
+        console.log("error in updateTimeLog", error);
+        next(error);
+    }
+};
+
+export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs, addTimeLog, updateTimeLog, deleteTimeLog, chanegTimeSheetStatus, addNote, updateNote, deleteNote };

@@ -8,6 +8,7 @@ export interface IPermission extends Document {
   editServices: boolean;
   editJobBuilder: boolean;
   editJobTemplates: boolean;
+  bulkDeleteLogs: boolean;
 }
 
 const permissionSchema = new Schema<IPermission>({
@@ -34,6 +35,10 @@ const permissionSchema = new Schema<IPermission>({
     default: false,
   },
   editJobTemplates: {
+    type: Boolean,
+    default: false,
+  },
+  bulkDeleteLogs: {
     type: Boolean,
     default: false,
   },
