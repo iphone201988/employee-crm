@@ -2,7 +2,7 @@ import Joi from "joi";
 
 const addExpenseValidation = {
     body: Joi.object({
-        netAccount: Joi.number().required().messages({
+        netAmount: Joi.number().required().messages({
             "number.base": "Account must be a number",
             "any.required": "Amount is required",
         }),
@@ -32,7 +32,7 @@ const addExpenseValidation = {
         vatPercentage: Joi.number().optional().messages({
             "number.base": "VAT percentage must be a number",
         }),
-        vatAccount: Joi.number().optional().messages({
+        vatAmount: Joi.number().optional().messages({
             "number.base": "VAT account must be a number",
         }),
         totalAmount: Joi.number().optional().messages({
@@ -54,7 +54,7 @@ const updateExpenseValidation ={
             }),
     }),
     body: Joi.object({
-        netAccount: Joi.number().optional().messages({
+        netAmount: Joi.number().optional().messages({
             "number.base": "Account must be a number",
         }),
         date: Joi.date().optional().messages({
@@ -79,7 +79,7 @@ const updateExpenseValidation ={
         vatPercentage: Joi.number().optional().messages({
             "number.base": "VAT percentage must be a number",
         }),
-        vatAccount: Joi.number().optional().messages({
+        vatAmount: Joi.number().optional().messages({
             "number.base": "VAT account must be a number",
         }),
         totalAmount: Joi.number().optional().messages({

@@ -38,6 +38,7 @@ const timesheetSchema = new mongoose.Schema({
     totalLogged: Number,
     totalCapacity: Number,
     totalVariance: Number,
+    autoApprovedAt: Date,
     submittedAt: Date,
     submittedBy: { type: Schema.Types.ObjectId, ref: 'User' },
 

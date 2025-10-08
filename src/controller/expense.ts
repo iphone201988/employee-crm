@@ -9,17 +9,17 @@ const createExpense = async (req: Request, res: Response, next: NextFunction): P
     try {
 
 
-        let { type, userId, vatPercentage, vatAccount, totalAmount, } = req.body;
+        let { type, userId, vatPercentage, vatAmount, totalAmount, } = req.body;
         if ((req.files as any)?.length) {
             req.body.attachments =
                 (req.files as any)?.map((file: any) => `/uploads/${file.filename}`);
         }
         req.body.companyId = req.user.companyId;
         req.body.submittedBy = req.userId;
-        req.body.netAccount = Number(req.body.netAccount) || 0;
+        req.body.netAmount = Number(req.body.netAmount) || 0;
         req.body.vatPercentage = Number(vatPercentage) || 5;
-        req.body.vatAccount = Number(vatAccount) || (req.body.netAccount * (req.body.vatPercentage / 100));
-        req.body.totalAmount = Number(totalAmount) || (req.body.netAccount + req.body.vatAccount);
+        req.body.vatAmount = Number(vatAmount) || (req.body.netAmount * (req.body.vatPercentage / 100));
+        req.body.totalAmount = Number(totalAmount) || (req.body.netAmount + req.body.vatAmount);
         if (type == 'team') {
             req.body.userId = userId || req.userId;
         }
@@ -42,10 +42,10 @@ const updateExpense = async (req: Request, res: Response, next: NextFunction): P
             req.body.attachments =
                 (req.files as any)?.map((file: any) => `/uploads/${file.filename}`);
         }
-        req.body.netAccount = Number(req.body.netAccount) || expense.netAccount;
+        req.body.netAmount = Number(req.body.netAmount) || expense.netAmount;
         req.body.vatPercentage = Number(req.body.vatPercentage) || expense.vatPercentage;
-        req.body.vatAccount = Number(req.body.vatAccount) || (req.body.netAccount * (req.body.vatPercentage / 100));
-        req.body.totalAmount = Number(req.body.totalAmount) || (req.body.netAccount + req.body.vatAccount);
+        req.body.vatAmount = Number(req.body.vatAmount) || (req.body.netAmount * (req.body.vatPercentage / 100));
+        req.body.totalAmount = Number(req.body.totalAmount) || (req.body.netAmount + req.body.vatAmount);
         const newExpense = await ExpensesModel.findByIdAndUpdate(expenseId, req.body, { new: true });
         SUCCESS(res, 200, "Expense updated successfully", { data: newExpense });
     } catch (error) {
@@ -97,6 +97,7 @@ const getExpenses = async (req: Request, res: Response, next: NextFunction): Pro
                     localField: "clientId",
                     foreignField: "_id",
                     as: "client",
+                    pipeline: [{ $project: { name: 1, _id: 1, } }],
                 },
             },
             { $unwind: { path: "$client", preserveNullAndEmptyArrays: true } },
@@ -106,9 +107,15 @@ const getExpenses = async (req: Request, res: Response, next: NextFunction): Pro
                     localField: "userId",
                     foreignField: "_id",
                     as: "user",
+                    pipeline: [{ $project: { name: 1, _id: 1, avatarUrl: 1 } }],
                 },
             },
             { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    
+                }
+            }
         ];
 
         // Conditionally add search stage
@@ -123,8 +130,63 @@ const getExpenses = async (req: Request, res: Response, next: NextFunction): Pro
         // Add pagination facet
         pipeline.push({
             $facet: {
-                data: [{ $skip: skip }, { $limit: limit }],
+                data: [{ $skip: skip }, {
+                    $limit: limit,
+                },
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "submittedBy",
+                            foreignField: "_id",
+                            as: "submittedDetails",
+                            pipeline: [{ $project: { name: 1, _id: 1, } }],
+                        }
+                    },
+                    {
+                        $unwind: { path: "$submittedDetails", preserveNullAndEmptyArrays: true }
+                    },
+
+                ],
                 count: [{ $count: "count" }],
+                statistics: [
+                    {
+                        $group: {
+                            _id: null,
+                            // Total counts
+                            totalExpenses: { $sum: 1 },
+                            totalStatusYesExpenses: {
+                                $sum: { $cond: [{ $eq: ["$status", "yes"] }, 1, 0] }
+                            },
+                            totalStatusNoExpenses: {
+                                $sum: { $cond: [{ $eq: ["$status", "no"] }, 1, 0] }
+                            },
+                            
+                            // Amount totals
+                            totalAmount: { $sum: "$totalAmount" },
+                            
+                            // Approved amounts (status = 'yes')
+                            approvedTotalAmount: {
+                                $sum: { $cond: [{ $eq: ["$status", "yes"] }, "$totalAmount", 0] }
+                            },
+                            
+                            // Pending amounts (status = 'no')
+                            pendingTotalAmount: {
+                                $sum: { $cond: [{ $eq: ["$status", "no"] }, "$totalAmount", 0] }
+                            },
+                            
+                            // Additional statistics
+                            averageExpenseAmount: { $avg: "$totalAmount" },
+                            maxExpenseAmount: { $max: "$totalAmount" },
+                            minExpenseAmount: { $min: "$totalAmount" },
+                            
+                        }
+                    },
+                    {
+                        $project: {
+                            _id: 0,
+                        }
+                    }
+                ]
             },
         });
 
@@ -133,6 +195,7 @@ const getExpenses = async (req: Request, res: Response, next: NextFunction): Pro
 
         const data = expenses[0]?.data || [];
         const totalExpenses = expenses[0]?.count[0]?.count || 0;
+        const statistics = expenses[0]?.statistics[0]|| {};
 
         const pagination = {
             page,
@@ -140,7 +203,7 @@ const getExpenses = async (req: Request, res: Response, next: NextFunction): Pro
             total: totalExpenses,
         };
 
-        SUCCESS(res, 200, "Expenses found successfully", { data: { data, pagination } });
+        SUCCESS(res, 200, "Expenses found successfully", { data: { expenses: expenses[0]?.data, pagination, statistics } });
     } catch (error) {
         console.log("error in getExpense", error);
         next(error);

@@ -9,9 +9,9 @@ export interface IExpenses extends Document {
     userId: mongoose.Types.ObjectId;
     expreseCategory: string;
     description: string;
-    netAccount: number;
+    netAmount: number;
     vatPercentage: number;
-    vatAccount: number;
+    vatAmount: number;
     totalAmount: number;
     status: 'yes' | 'no';
     attachments: string[];
@@ -50,13 +50,13 @@ const ExpensesSchema: Schema = new Schema<IExpenses>(
         description: {
             type: String,
         },
-        netAccount: {
+        netAmount: {
             type: Number,
         },
         vatPercentage: {
             type: Number,
         },
-        vatAccount: {
+        vatAmount: {
             type: Number,
         },
         totalAmount: {

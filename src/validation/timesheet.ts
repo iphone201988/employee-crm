@@ -388,9 +388,9 @@ const changeTimeSheetStatusValidation = {
                 'string.pattern': 'timeSheetId must be a valid MongoDB ObjectId',
             }),
         status: Joi.string()
-            .valid("rejected", "approved", "reviewed")
+            .valid("rejected", "approved", "reviewed", 'autoApproved')
             .messages({
-                'any.only': 'status must be one of: notInvoiced, paid, invoiced'
+                'any.only': 'status must be one of: rejected, approved, reviewed, autoApproved'
             }),
     })
 };

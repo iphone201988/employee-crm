@@ -17,11 +17,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
         const userId = req.userId;
         const companyId = req.user.companyId;
         const { weekStart, weekEnd, timeEntries, isbillable, ...otherData } = req.body;
-        const setting = await SettingModel.findOne({ companyId });
         let timesheet = await TimesheetModel.findOne({ weekStart, weekEnd, userId });
-        if (setting && setting.autoApproveTimesheets) {
-            otherData.status = "autoApproved";
-        }
         if (timesheet) {
             Object.assign(timesheet, otherData);
         } else {
@@ -785,13 +781,17 @@ const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunc
     try {
         const { timeSheetId, status } = req.body;
         const update: any = {};
-
         if (status == "reviewed") {
             update.status = "reviewed";
             update.reviewedAt = new Date().toISOString().slice(0, 10);
             update.submittedAt = new Date().toISOString().slice(0, 10);
             update.reviewedBy = req.userId
             update.submittedBy = req.userId
+            const setting = await SettingModel.findOne({ companyId: req.user.companyId });
+            if (setting && setting.autoApproveTimesheets) {
+                update.status = "autoApproved";
+                update.autoApprovedAt = new Date().toISOString().slice(0, 10);
+            }
         } else if (status == "approved") {
             update.status = "approved";
             update.approvedBy = req.userId
