@@ -442,6 +442,7 @@ const getAllTimeLogs = async (req: Request, res: Response, next: NextFunction): 
             jobId,
             timeCategoryId,
             userId,
+            jobTypeId,
             billable,
             invoiceStatus,
             startDate,
@@ -468,6 +469,9 @@ const getAllTimeLogs = async (req: Request, res: Response, next: NextFunction): 
 
         if (userId) {
             filter.userId = { $in: (userId as string).split(',').map((id: string) => ObjectId(id)) };
+        }
+        if (jobTypeId) {
+            filter.jobTypeId = { $in: (jobTypeId as string).split(',').map((id: string) => ObjectId(id)) };
         }
 
         // Boolean filter for billable

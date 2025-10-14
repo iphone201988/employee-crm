@@ -203,7 +203,7 @@ const getExpenses = async (req: Request, res: Response, next: NextFunction): Pro
             total: totalExpenses,
         };
 
-        SUCCESS(res, 200, "Expenses found successfully", { data: { expenses: expenses[0]?.data, pagination, statistics } });
+        SUCCESS(res, 200, "Expenses found successfully", { data: { expenses: data, pagination, statistics } });
     } catch (error) {
         console.log("error in getExpense", error);
         next(error);
