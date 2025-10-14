@@ -275,7 +275,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
         } else if (type === "bussiness") {
             data.bussiness = await BusinessCategoryModel.find({ companyId }, { _id: 1, name: 1, }).lean();
         } else if (type === "team") {
-            data.teams = await UserModel.find({ role: "team" }, { _id: 1, name: 1, }).lean();
+            data.teams = await UserModel.find({ role: "team", companyId }, { _id: 1, name: 1, }).lean();
         } else if (type === "client") {
             data.clients = await ClientModel.find({ companyId, status: "active" }, { _id: 1, name: 1, }).lean();
         } else if (type === "company") {
@@ -283,7 +283,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
         } else if (type === "jobList") {
             let query: any = { companyId };
             if (clientId) query.clientId = clientId;
-            data.jobs = await JobModel.find(query, { _id: 1, name: 1, }).lean();
+            data.jobs = await JobModel.find(query, { _id: 1, name: 1, clientId: 1}).lean();
         } else {
             throw new BadRequestError("Invalid type");
         }

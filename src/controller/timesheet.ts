@@ -455,19 +455,19 @@ const getAllTimeLogs = async (req: Request, res: Response, next: NextFunction): 
 
         // Basic filters
         if (clientId) {
-            filter.clientId = ObjectId(clientId as string);
+            filter.clientId ={ $in: (clientId as string).split(',').map((id: string) => ObjectId(id)) };
         }
 
         if (jobId) {
-            filter.jobId = ObjectId(jobId as string);
+            filter.jobId = { $in: (jobId as string).split(',').map((id: string) => ObjectId(id)) };
         }
 
         if (timeCategoryId) {
-            filter.timeCategoryId = ObjectId(timeCategoryId as string);
+            filter.timeCategoryId = { $in: (timeCategoryId as string).split(',').map((id: string) => ObjectId(id)) };
         }
 
         if (userId) {
-            filter.userId = ObjectId(userId as string);
+            filter.userId = { $in: (userId as string).split(',').map((id: string) => ObjectId(id)) };
         }
 
         // Boolean filter for billable
