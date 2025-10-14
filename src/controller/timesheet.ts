@@ -751,7 +751,7 @@ const getAllTimeLogs = async (req: Request, res: Response, next: NextFunction): 
 
 const addTimeLog = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        req.body.userId = req.userId;
+        req.body.userId = req.body.userId || req.userId;
         req.body.companyId = req.user.companyId;
         if (req.body.duration && req.body.rate) req.body.amount = calculateEarnings(req.body.duration, req.body.rate);
         await TimeLogModel.create(req.body);
