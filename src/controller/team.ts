@@ -15,6 +15,7 @@ import { BusinessCategoryModel } from "../models/BusinessCategory";
 import { ClientModel } from "../models/Client";
 import { JobModel } from "../models/Job";
 import { SettingModel } from "../models/Setting";
+import { getWIPDashboardData } from "./wip";
 
 const uploadImage = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -50,7 +51,7 @@ const addTeamMember = async (req: Request, res: Response, next: NextFunction): P
             avatarUrl,
             JobFees
         });
-        teamMember.companyId = companyId || req.userId;
+        teamMember.companyId = companyId || currentUser.companyId;
         await teamMember.save();
         await PermissionModel.create({
             userId: teamMember._id,
@@ -179,6 +180,7 @@ const updateTeamMembers = async (req: Request, res: Response, next: NextFunction
         if (rates?.length > 0) {
             for (const rate of rates) {
                 const { userId, ...rest } = rate
+                console.log("rest", rest);
                 await UserModel.findByIdAndUpdate(userId, { ...rest }, { upsert: true });
             }
         }

@@ -312,6 +312,13 @@ const addTimeLogValidation = {
     })
 };
 const updateTimeLogValidation = {
+    params: Joi.object({
+        timeLogId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required()
+            .messages({
+                'string.pattern': 'timeLogId must be a valid MongoDB ObjectId',
+                'any.required': 'timeLogId is required'
+            }),
+    }),
     body: Joi.object({
         date: Joi.date().optional(),
         duration: Joi.number()

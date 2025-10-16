@@ -63,7 +63,11 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                 }
 
                 const logs = timeEntry?.logs || [];
+                let totalHours= 0;
+                let totalAmount = 0;
+                const rate = timeEntry?.rate || 0;
                 for (const log of logs) {
+                    totalHours+=log.duration;
                     const addedLog = {
                         userId: timesheet?.userId || userId,
                         timeEntrieId: data._id,
@@ -92,7 +96,11 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                         new: true
                     });
                 }
+                totalAmount = calculateEarnings(totalHours, rate);
                 if (data) {
+                    data.totalHours = totalHours;
+                    data.totalAmount = totalAmount;
+                    await data.save();
                     timeEntriesIds.push(data._id);
                 }
 
@@ -785,6 +793,7 @@ const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunc
     try {
         const { timeSheetId, status } = req.body;
         const update: any = {};
+        console.log("status", status, timeSheetId);
         if (status == "reviewed") {
             update.status = "reviewed";
             update.reviewedAt = new Date().toISOString().slice(0, 10);
@@ -792,7 +801,7 @@ const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunc
             update.reviewedBy = req.userId
             update.submittedBy = req.userId
             const setting = await SettingModel.findOne({ companyId: req.user.companyId });
-            if (setting && setting.autoApproveTimesheets) {
+            if (setting && setting?.autoApproveTimesheets) {
                 update.status = "autoApproved";
                 update.autoApprovedAt = new Date().toISOString().slice(0, 10);
             }
@@ -805,7 +814,7 @@ const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunc
             update.rejectedAt = new Date().toISOString().slice(0, 10);
             update.rejectedBy = req.userId
         }
-        await TimesheetModel.findByIdAndUpdate(timeSheetId, req.body, { new: true });
+        await TimesheetModel.findByIdAndUpdate(timeSheetId, update, { new: true });
         SUCCESS(res, 200, "Time log updated successfully", { data: {} });
     } catch (error) {
         console.log("error in updateTimeLog", error);
