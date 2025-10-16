@@ -421,7 +421,7 @@ const getTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
             {
                 data: timesheet,
                 dropdoenOptionals: { clients, jobs, jobCategories },
-                rate: user?.rate,
+                rate: user?.billableRate,
                 name: user?.name,
                 avatarUrl: user?.avatarUrl
             });
