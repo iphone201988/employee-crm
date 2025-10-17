@@ -14,16 +14,19 @@ import { NotesModel } from "../models/Notes";
 
 const addTimesheet = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        const userId = req.userId;
+        const currentUserId = req.userId;
         const companyId = req.user.companyId;
-        const { weekStart, weekEnd, timeEntries, isbillable, ...otherData } = req.body;
+        let { weekStart, weekEnd, timeEntries, isbillable, userId, ...otherData } = req.body;
+        userId = userId || currentUserId;
+        let oldTimeEntry:any;
         let timesheet = await TimesheetModel.findOne({ weekStart, weekEnd, userId });
         if (timesheet) {
+            oldTimeEntry = timesheet.timeEntries || [];
             Object.assign(timesheet, otherData);
         } else {
             timesheet = await TimesheetModel.create({ weekStart, weekEnd, userId, isbillable, companyId, ...otherData });
         }
-
+console.log("timeEntries", timeEntries);
         const timeEntriesIds: any = [];
         if (timeEntries?.length > 0) {
             for (const timeEntry of timeEntries) {
@@ -78,7 +81,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                         timeCategoryId: timeEntry.timeCategoryId,
                         date: log.date,
                         description: timeEntry.description,
-                        billable: timeEntry.billable,
+                        billable: timeEntry.isbillable,
                         duration: log.duration,
                         rate: timeEntry.rate,
                         amount: calculateEarnings(log.duration, timeEntry.rate),
@@ -89,7 +92,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                         clientId: timeEntry.clientId,
                         jobId: timeEntry.jobId,
                         timeCategoryId: timeEntry.timeCategoryId,
-                        billable: timeEntry.billable,
+                        billable: timeEntry.isbillable,
                         date: log.date
                     }, addedLog, {
                         upsert: true,
@@ -109,6 +112,15 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
 
         timesheet.timeEntries = timeEntriesIds;
         await timesheet.save();
+
+        if (oldTimeEntry?.length > 0) {
+            for (const timeEntry of oldTimeEntry) {
+                if (!timeEntriesIds.includes(timeEntry._id)) {
+                    await TimeEntryModel.findByIdAndDelete(timeEntry._id);
+                    await TimeLogModel.deleteMany({ timeEntrieId: timeEntry._id });
+                }
+            }
+        }
 
         SUCCESS(res, 200, "Timesheet added successfully", { data: timesheet });
     } catch (error) {

@@ -26,6 +26,9 @@ const addTimesheetValidation = {
             .messages({
                 'any.only': 'status must be one of: draft, submitted, reviewed, approved, rejected'
             }),
+        userId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional().messages({
+            'string.pattern': 'userId must be a valid MongoDB ObjectId'
+        }),
 
         timeEntries: Joi.array().items(
             Joi.object({
