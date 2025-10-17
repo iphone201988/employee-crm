@@ -13,7 +13,7 @@ export interface ITimeLog extends Document {
     billable: boolean;
     duration: number;  
     rate: number;
-    invoiceStatus: string;
+    status: string;
     amount: number;
     createdAt: Date;
     updatedAt: Date;
@@ -81,9 +81,10 @@ const TimeLogSchema: Schema = new Schema<ITimeLog>(
             default: 0
 
         },
-        invoiceStatus: {
+        status: {
             type: String,
             enum: ['notInvoiced', 'invoiced', 'paid'],
+            default: 'notInvoiced',
         },
     },
     {

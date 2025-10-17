@@ -772,6 +772,7 @@ const addTimeLog = async (req: Request, res: Response, next: NextFunction): Prom
 const updateTimeLog = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const { timeLogId } = req.params;
+        if (req.body.duration && req.body.rate) req.body.amount = calculateEarnings(req.body.duration, req.body.rate);
         await TimeLogModel.findByIdAndUpdate(timeLogId, req.body, { new: true });
         SUCCESS(res, 200, "Time log updated successfully", { data: {} });
     } catch (error) {
