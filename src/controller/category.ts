@@ -11,10 +11,11 @@ import { ClientModel } from "../models/Client";
 import { JobModel } from "../models/Job";
 import { TimesheetModel } from "../models/Timesheet";
 import { TimeEntryModel } from "../models/TimeEntry";
+import { WipTragetAmountsModel } from "../models/WIPTargetAmounts";
 
 const createCategory = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        const { name, type } = req.body;
+        const { name, amount, type } = req.body;
         const companyId = req.user.companyId;
         if (!name) {
             throw new BadRequestError("Category name is required");
@@ -59,6 +60,17 @@ const createCategory = async (req: Request, res: Response, next: NextFunction): 
             await BusinessCategoryModel.create({ name, companyId });
             SUCCESS(res, 200, "Category created successfully", { data: {} });
             return;
+        } else if (type === "wipTargetAmount") {
+            if (!amount) {
+                throw new BadRequestError("Amount is required");
+            };
+            const existingCategory = await WipTragetAmountsModel.findOne({ amount, companyId });
+            if (existingCategory) {
+                throw new BadRequestError("Category already exists");
+            }
+            await WipTragetAmountsModel.create({ amount, companyId });
+            SUCCESS(res, 200, "Category created successfully", { data: {} });
+            return;
         } else {
             throw new BadRequestError("Invalid type");
         }
@@ -101,6 +113,13 @@ const deleteCategory = async (req: Request, res: Response, next: NextFunction): 
             return;
         } else if (type === "bussiness") {
             const category = await BusinessCategoryModel.findByIdAndDelete(id);
+            if (!category) {
+                throw new BadRequestError("Category not found");
+            }
+            SUCCESS(res, 200, "Category deleted successfully", { data: {} });
+            return;
+        } else if (type === "wipTargetAmount") {
+            const category = await WipTragetAmountsModel.findByIdAndDelete(id);
             if (!category) {
                 throw new BadRequestError("Category not found");
             }
@@ -159,8 +178,15 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             })
             SUCCESS(res, 200, "Categories fetched successfully", { data: { bussiness } });
             return;
+        } else if (type === "wipTargetAmount") {
+            const wipTargetAmount = await WipTragetAmountsModel.find({ companyId }).lean();
+            wipTargetAmount.forEach((traget: any) => {
+                traget.count = 0
+            })
+            SUCCESS(res, 200, "Categories fetched successfully", { data: { wipTargetAmount } });
+            return;
         } else {
-            const [departments, services, jobs, times, bussiness, userDepartments, clientServices, clientBussiness, jobList, timeEntries] = await Promise.all(
+            const [departments, services, jobs, times, bussiness, userDepartments, clientServices, clientBussiness, jobList, timeEntries, wipTargetAmount ] = await Promise.all(
                 [
                     DepartmentCategoryModel.find({ companyId }).lean(),
                     ServicesCategoryModel.find({ companyId }).lean(),
@@ -172,6 +198,7 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
                     ClientModel.find({}, { _id: 1, businessTypeId: 1 }).lean(),
                     JobModel.find({}, { jobTypeId: 1 }).lean(),
                     TimeEntryModel.find({ companyId }, { _id: 1, timeCategoryId: 1 }).lean(),
+                    WipTragetAmountsModel.find({ companyId }).lean()
                 ]);
             departments.forEach((department: any) => {
                 department.count = userDepartments.filter((team: any) => team.departmentId.toString() === department._id.toString()).length
@@ -189,7 +216,11 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
                 bussiness.count = clientBussiness.filter((client: any) => client.businessTypeId.toString() === bussiness._id.toString()).length
             })
 
-            SUCCESS(res, 200, "Categories fetched successfully", { data: { departments, services, jobs, times, bussiness } });
+            wipTargetAmount.forEach((traget: any) => {
+                traget.count = 0
+            })
+
+            SUCCESS(res, 200, "Categories fetched successfully", { data: { departments, services, jobs, times, bussiness, wipTargetAmount } });
             return;
         }
     } catch (error) {

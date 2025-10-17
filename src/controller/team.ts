@@ -253,7 +253,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
                     BusinessCategoryModel.find({ companyId }, { _id: 1, name: 1, }).lean(),
                     UserModel.find({ role: "team", companyId }, { _id: 1, name: 1, }).lean(),
                     ClientModel.find({ companyId, status: "active" }, { _id: 1, name: 1, }).lean(),
-                    JobModel.find({ companyId }, { _id: 1, name: 1, }).lean(),
+                    JobModel.find({ companyId, }, { _id: 1, name: 1, clientId: 1 }).lean(),
                     UserModel.find({ role: "company" }, { _id: 1, name: 1, }).lean(),
                 ]);
             data.departments = departments;

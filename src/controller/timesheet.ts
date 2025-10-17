@@ -18,7 +18,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
         const companyId = req.user.companyId;
         let { weekStart, weekEnd, timeEntries, isbillable, userId, ...otherData } = req.body;
         userId = userId || currentUserId;
-        let oldTimeEntry:any;
+        let oldTimeEntry: any;
         let timesheet = await TimesheetModel.findOne({ weekStart, weekEnd, userId });
         if (timesheet) {
             oldTimeEntry = timesheet.timeEntries || [];
@@ -26,7 +26,7 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
         } else {
             timesheet = await TimesheetModel.create({ weekStart, weekEnd, userId, isbillable, companyId, ...otherData });
         }
-console.log("timeEntries", timeEntries);
+        console.log("timeEntries", timeEntries);
         const timeEntriesIds: any = [];
         if (timeEntries?.length > 0) {
             for (const timeEntry of timeEntries) {
@@ -66,11 +66,11 @@ console.log("timeEntries", timeEntries);
                 }
 
                 const logs = timeEntry?.logs || [];
-                let totalHours= 0;
+                let totalHours = 0;
                 let totalAmount = 0;
                 const rate = timeEntry?.rate || 0;
                 for (const log of logs) {
-                    totalHours+=log.duration;
+                    totalHours += log.duration;
                     const addedLog = {
                         userId: timesheet?.userId || userId,
                         timeEntrieId: data._id,
@@ -115,7 +115,9 @@ console.log("timeEntries", timeEntries);
 
         if (oldTimeEntry?.length > 0) {
             for (const timeEntry of oldTimeEntry) {
-                if (!timeEntriesIds.includes(timeEntry._id)) {
+                console.log("timeEntry", timeEntry, "timeEntriesIds", timeEntriesIds, timeEntriesIds.includes(timeEntry));
+                if (!timeEntriesIds.some((id: any) => id.toString() === timeEntry.toString())) {
+                    console.log('timeEntry', timeEntry);
                     await TimeEntryModel.findByIdAndDelete(timeEntry._id);
                     await TimeLogModel.deleteMany({ timeEntrieId: timeEntry._id });
                 }
@@ -435,7 +437,7 @@ const getTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
             JobCategoryModel.find({ companyId: user?.companyId }, { _id: 1, name: 1 }).lean()
         ]);
         const clientIds = jobs.map((job: any) => job.clientId);
-        const clients = await ClientModel.find({ _id: { $in: clientIds } }, { _id: 1, name: 1, clientRef: 1 }).lean();
+        const clients = await ClientModel.find({ _id: { $in: clientIds } , status: "active"}, { _id: 1, name: 1, clientRef: 1 }).lean();
 
         SUCCESS(res, 200, "Timesheet fetched successfully",
             {
@@ -476,7 +478,7 @@ const getAllTimeLogs = async (req: Request, res: Response, next: NextFunction): 
 
         // Basic filters
         if (clientId) {
-            filter.clientId ={ $in: (clientId as string).split(',').map((id: string) => ObjectId(id)) };
+            filter.clientId = { $in: (clientId as string).split(',').map((id: string) => ObjectId(id)) };
         }
 
         if (jobId) {

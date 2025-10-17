@@ -2,9 +2,11 @@ import Joi from "joi";
 
 const addCategoryValidation = {
     body: Joi.object({
-        name: Joi.string().required().messages({
+        name: Joi.string().optional().messages({
             "string.base": "Name must be a string",
-            "any.required": "Name is required",
+        }),
+        amount: Joi.number().optional().messages({
+            "number.base": "Amount must be a number",
         }),
         type: Joi.string().required().messages({
             "string.base": "Type must be a string",
