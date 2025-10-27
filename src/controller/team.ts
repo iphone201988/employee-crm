@@ -852,6 +852,7 @@ const reports = async (req: Request, res: Response, next: NextFunction): Promise
             // period: formatPeriod(log.period, periodType),
             name: log.name,
             userId: log.userId,
+            avatarUrl: log.avatarUrl,
             hourlyRate: log.hourlyRate,
             capacity: log.capacity,
             logged: log.logged,

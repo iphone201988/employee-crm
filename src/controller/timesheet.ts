@@ -192,7 +192,7 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                             $project: {
                                 name: 1,
                                 email: 1,
-                                avatar: 1,
+                                avatarUrl: 1,
                                 departmentId: 1
                             }
                         }
