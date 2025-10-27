@@ -14,6 +14,7 @@ export interface IJob extends Document {
     description: string;
     createdBy: mongoose.Types.ObjectId;
     priority: 'high' | 'medium' | 'low' | 'urgent';
+    wipTargetId: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -81,6 +82,10 @@ const JobSchema: Schema = new Schema<IJob>(
             type: String,
             enum: ['low', 'medium', 'high', 'urgent'],
             default: 'low',
+        },
+        wipTargetId: {
+            type: Schema.Types.ObjectId,
+            ref: 'WipTragetAmounts',
         }
     },
     {

@@ -10,6 +10,10 @@ import { ObjectId } from '../utils/utills';
 import mongoose from 'mongoose';
 import { SUCCESS } from '../utils/response';
 import { NextFunction, Request, Response } from 'express';
+import { WipOpenBalanceModel } from '../models/wipOpenBalance';
+import { TimeLogModel } from '../models/TImeLog';
+import { WipTragetAmountsModel } from '../models/WIPTargetAmounts';
+import { BadRequestError, NotFoundError } from '../utils/errors';
 
 // Main function to get WIP data
 export async function getWIPDashboardData(companyId: string) {
@@ -487,7 +491,18 @@ function calculateWIPSummary(wipData: any[]) {
         totalLogged: totalLogged.toFixed(2)
     };
 }
+const createOpenWipBalance = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    const companyId = req.user.companyId;
+    try {
+        const { clientId, amount, jobId, type } = req.body;
+        const openBalance = await WipOpenBalanceModel.create({ clientId, amount, jobId, type, companyId });
+        SUCCESS(res, 200, "Open balance created successfully", { data: openBalance });
 
+    } catch (error) {
+        console.log("error in createOpenWipBalance", error);
+        next(error);
+    }
+}
 const workInProgress = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const companyId = req.user.companyId;
@@ -561,6 +576,37 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                             }
                         },
                         {
+                            $lookup: {
+                                from: 'wipopenbalances',
+                                localField: '_id',
+                                foreignField: 'jobId',
+                                as: 'wipopenbalances'
+                            }
+                        },
+                        {
+                            $addFields: {
+                                wipTotalOpenBalance: {
+                                    $sum: '$wipopenbalances.amount'
+                                }
+
+                            }
+                        },
+                        {
+                            $lookup:{
+                                from:'wiptragetamounts',
+                                localField:'wipTargetId',
+                                foreignField:'_id',
+                                as:'jobWipTraget'
+                            }
+                        },
+                        {
+                            $unwind: {
+                                path: '$jobWipTraget',
+                                preserveNullAndEmptyArrays: true
+                            }
+                        },
+
+                        {
                             $project: {
                                 _id: 1,
                                 name: 1,
@@ -570,7 +616,11 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                 endDate: 1,
                                 priority: 1,
                                 wipAmount: 1,
-                                wipDuration: 1
+                                wipDuration: 1,
+                                wipopenbalances: 1,
+                                wipTotalOpenBalance: 1,
+                                jobWipTraget:1
+
                             }
                         }
                     ],
@@ -579,34 +629,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
             },
 
 
-            // {
-            //     $lookup: {
-            //         from: 'timelogs',
-            //         let: { clientId: '$_id', companyId: '$companyId' },
-            //         pipeline: [
-            //             {
-            //                 $match: {
-            //                     $expr: {
-            //                         $and: [
-            //                             { $eq: ['$clientId', '$$clientId'] },
-            //                             { $eq: ['$companyId', '$$companyId'] },
-            //                             { $eq: ['$billable', true] }
-            //                         ]
-            //                     }
-            //                 }
-            //             },
 
-            //             {
-            //                 $group: {
-            //                     _id: '$jobId',
-            //                     totalAmount: { $sum: '$amount' },
-            //                     totalHours: { $sum: '$duration' },
-            //                 }
-            //             }
-            //         ],
-            //         as: 'timelogs'
-            //     }
-            // },
             {
                 $lookup: {
                     from: 'expenses',
@@ -645,8 +668,34 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                     expensesData: { $arrayElemAt: ['$expensesData', 0] }
                 }
             },
-
-
+            {
+                $lookup: {
+                    from: 'wipopenbalances',
+                    localField: '_id',
+                    foreignField: 'clientId',
+                    as: 'clientWipOpenBalance'
+                }
+            }, {
+                $addFields: {
+                    clientWipTotalOpenBalance: {
+                        $sum: '$clientWipOpenBalance.amount'
+                    }
+                }
+            },
+            {
+                $lookup:{
+                    from:'wiptragetamounts',
+                    localField:'wipTargetId',
+                    foreignField:'_id',
+                    as:'clientWipTraget'
+                }
+                
+            },{
+                $unwind: {
+                    path: '$clientWipTraget',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
             {
                 $project: {
                     _id: 1,
@@ -658,7 +707,11 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                     jobs: 1,
                     expensesData: 1,
                     companyId: 1,
-                    timelogs: 1
+                    timelogs: 1,
+                    clientWipTotalOpenBalance: 1,
+                    clientWipOpenBalance: 1,
+                    clientWipTraget:1
+
                 },
             },
 
@@ -671,7 +724,286 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
         console.log("error in workInProgress", error);
         next(error);
     }
+};
+const wipBalance = async (req: Request, res: Response) => {
+    try {
+        const {
+            startDate,
+            endDate,
+            clientId,
+        }: any = req.query;
+
+        const companyId = req.user.companyId;
+
+        const currentDate = new Date();
+
+        // Build match conditions
+        const matchConditions: any = {
+            companyId: companyId,
+            //   status: 'notInvoiced', // Only unbilled/not invoiced time logs
+            billable: true, // Only billable hours
+        };
+
+        if (clientId) {
+            matchConditions.clientId = new mongoose.Types.ObjectId(clientId);
+        }
+
+        if (startDate) {
+            matchConditions.date = { $gte: new Date(startDate) };
+        }
+
+        if (endDate) {
+            matchConditions.date = {
+                ...matchConditions.date,
+                $lte: new Date(endDate),
+            };
+        }
+
+        // Aggregation pipeline to calculate WIP balance with aging
+        const wipData = await TimeLogModel.aggregate([
+            {
+                $match: matchConditions,
+            },
+            {
+                $addFields: {
+                    // Calculate days difference from current date
+                    daysOld: {
+                        $divide: [
+                            { $subtract: [currentDate, '$date'] },
+                            1000 * 60 * 60 * 24, // Convert milliseconds to days
+                        ],
+                    },
+                },
+            },
+            {
+                $group: {
+                    _id: '$clientId',
+                    wipBalance: { $sum: '$amount' },
+                    days30: {
+                        $sum: {
+                            $cond: [{ $lte: ['$daysOld', 30] }, '$amount', 0],
+                        },
+                    },
+                    days60: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $gt: ['$daysOld', 30] },
+                                        { $lte: ['$daysOld', 60] },
+                                    ],
+                                },
+                                '$amount',
+                                0,
+                            ],
+                        },
+                    },
+                    days90: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $gt: ['$daysOld', 60] },
+                                        { $lte: ['$daysOld', 90] },
+                                    ],
+                                },
+                                '$amount',
+                                0,
+                            ],
+                        },
+                    },
+                    days120: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $gt: ['$daysOld', 90] },
+                                        { $lte: ['$daysOld', 120] },
+                                    ],
+                                },
+                                '$amount',
+                                0,
+                            ],
+                        },
+                    },
+                    days150: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $gt: ['$daysOld', 120] },
+                                        { $lte: ['$daysOld', 150] },
+                                    ],
+                                },
+                                '$amount',
+                                0,
+                            ],
+                        },
+                    },
+                    days180: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $gt: ['$daysOld', 150] },
+                                        { $lte: ['$daysOld', 180] },
+                                    ],
+                                },
+                                '$amount',
+                                0,
+                            ],
+                        },
+                    },
+                    days180Plus: {
+                        $sum: {
+                            $cond: [{ $gt: ['$daysOld', 180] }, '$amount', 0],
+                        },
+                    },
+                },
+            },
+            {
+                $lookup: {
+                    from: 'clients',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'clientInfo',
+                },
+            },
+            {
+                $unwind: '$clientInfo',
+            },
+            {
+                $project: {
+                    _id: 0,
+                    clientId: '$_id',
+                    clientRef: '$clientInfo.clientRef',
+                    clientName: '$clientInfo.name',
+                    wipBalance: { $round: ['$wipBalance', 2] },
+                    days30: { $round: ['$days30', 2] },
+                    days60: { $round: ['$days60', 2] },
+                    days90: { $round: ['$days90', 2] },
+                    days120: { $round: ['$days120', 2] },
+                    days150: { $round: ['$days150', 2] },
+                    days180: { $round: ['$days180', 2] },
+                    days180Plus: { $round: ['$days180Plus', 2] },
+                },
+            },
+            {
+                $sort: { clientRef: 1 },
+            },
+        ]);
+
+        // Calculate totals
+        const totals = wipData.reduce(
+            (acc, client) => {
+                acc.wipBalance += client.wipBalance;
+                acc.days30 += client.days30;
+                acc.days60 += client.days60;
+                acc.days90 += client.days90;
+                acc.days120 += client.days120;
+                acc.days150 += client.days150;
+                acc.days180 += client.days180;
+                acc.days180Plus += client.days180Plus;
+                return acc;
+            },
+            {
+                wipBalance: 0,
+                days30: 0,
+                days60: 0,
+                days90: 0,
+                days120: 0,
+                days150: 0,
+                days180: 0,
+                days180Plus: 0,
+            }
+        );
+
+        // Calculate summary cards
+        const summary = {
+            totalWIPBalance: parseFloat(totals.wipBalance.toFixed(2)),
+            current0_30Days: parseFloat(totals.days30.toFixed(2)),
+            days31_60: parseFloat(totals.days60.toFixed(2)),
+            days60Plus: parseFloat(
+                (
+                    totals.days90 +
+                    totals.days120 +
+                    totals.days150 +
+                    totals.days180 +
+                    totals.days180Plus
+                ).toFixed(2)
+            ),
+        };
+
+        const response = {
+            summary,
+            clients: wipData,
+            totalRow: {
+                wipBalance: parseFloat(totals.wipBalance.toFixed(2)),
+                days30: parseFloat(totals.days30.toFixed(2)),
+                days60: parseFloat(totals.days60.toFixed(2)),
+                days90: parseFloat(totals.days90.toFixed(2)),
+                days120: parseFloat(totals.days120.toFixed(2)),
+                days150: parseFloat(totals.days150.toFixed(2)),
+                days180Plus: parseFloat(
+                    (totals.days180 + totals.days180Plus).toFixed(2)
+                ),
+            },
+        };
+
+        return res.status(200).json({
+            success: true,
+            data: response,
+        });
+    } catch (error: any) {
+        console.error('Error fetching WIP balance:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to fetch WIP balance',
+            error: error.message,
+        });
+    }
+};
+
+const attachWipTarget = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { clientId, wipTargetId, jobId, type } = req.body;
+        const wipTarget = await WipTragetAmountsModel.findById(wipTargetId);
+        if (!wipTarget) {
+            throw new NotFoundError("WIP target not found");
+        }
+
+        switch (type) {
+            case "job": {
+                if (!jobId) throw new BadRequestError("Job ID is required");
+
+                const job = await JobModel.findById(jobId);
+                if (!job) throw new NotFoundError("Job not found");
+
+                job.wipTargetId = wipTargetId;
+                await job.save();
+                break;
+            }
+
+            case "client": {
+                if (!clientId) throw new BadRequestError("Client ID is required");
+
+                const client = await ClientModel.findById(clientId);
+                if (!client) throw new NotFoundError("Client not found");
+
+                client.wipTargetId = wipTargetId;
+                await client.save();
+                break;
+            }
+
+            default:
+                throw new BadRequestError("Invalid type — must be 'job' or 'client'");
+        }
+
+        return SUCCESS(res, 200, "WIP target attached successfully", { wipTarget });
+    } catch (error) {
+        console.log("error in addWipTarget", error);
+        next(error);
+    }
 }
 
-
-export default { workInProgress };
+export default { workInProgress, createOpenWipBalance, wipBalance, attachWipTarget };

@@ -17,10 +17,10 @@ const createCategory = async (req: Request, res: Response, next: NextFunction): 
     try {
         const { name, amount, type } = req.body;
         const companyId = req.user.companyId;
-        if (!name) {
-            throw new BadRequestError("Category name is required");
-        };
         if (type === "department") {
+            if (!name) {
+                throw new BadRequestError("Category name is required");
+            };
             const existingCategory = await DepartmentCategoryModel.findOne({ name, companyId });
             if (existingCategory) {
                 throw new BadRequestError("Category already exists");
@@ -29,6 +29,9 @@ const createCategory = async (req: Request, res: Response, next: NextFunction): 
             SUCCESS(res, 200, "Category created successfully", { data: {} });
             return;
         } else if (type === "service") {
+                  if (!name) {
+                throw new BadRequestError("Category name is required");
+            };
             const existingCategory = await ServicesCategoryModel.findOne({ name, companyId });
             if (existingCategory) {
                 throw new BadRequestError("Category already exists");
@@ -37,6 +40,9 @@ const createCategory = async (req: Request, res: Response, next: NextFunction): 
             SUCCESS(res, 200, "Category created successfully", { data: {} });
             return;
         } else if (type === "job") {
+                  if (!name) {
+                throw new BadRequestError("Category name is required");
+            };
             const existingCategory = await JobCategoryModel.findOne({ name, companyId });
             if (existingCategory) {
                 throw new BadRequestError("Category already exists");
@@ -45,6 +51,9 @@ const createCategory = async (req: Request, res: Response, next: NextFunction): 
             SUCCESS(res, 200, "Category created successfully", { data: {} });
             return;
         } else if (type === "time") {
+                  if (!name) {
+                throw new BadRequestError("Category name is required");
+            };
             const existingCategory = await TimeCategoryModel.findOne({ name, companyId });
             if (existingCategory) {
                 throw new BadRequestError("Category already exists");
@@ -53,6 +62,9 @@ const createCategory = async (req: Request, res: Response, next: NextFunction): 
             SUCCESS(res, 200, "Category created successfully", { data: {} });
             return;
         } else if (type === "bussiness") {
+                  if (!name) {
+                throw new BadRequestError("Category name is required");
+            };
             const existingCategory = await BusinessCategoryModel.findOne({ name, companyId });
             if (existingCategory) {
                 throw new BadRequestError("Category already exists");
@@ -180,13 +192,18 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             return;
         } else if (type === "wipTargetAmount") {
             const wipTargetAmount = await WipTragetAmountsModel.find({ companyId }).lean();
+            const clients = await ClientModel.find({companyId, wipTargetId: { $exists: true }}).lean();
+            const jobs = await JobModel.find({companyId, wipTargetId: { $exists: true }}).lean();
             wipTargetAmount.forEach((traget: any) => {
-                traget.count = 0
+                traget.count = clients.filter((client: any) => client.wipTargetId.toString() === traget._id.toString()).length
+            })
+            wipTargetAmount.forEach((traget: any) => {
+                traget.count += jobs.filter((job: any) => job.wipTargetId.toString() === traget._id.toString()).length
             })
             SUCCESS(res, 200, "Categories fetched successfully", { data: { wipTargetAmount } });
             return;
         } else {
-            const [departments, services, jobs, times, bussiness, userDepartments, clientServices, clientBussiness, jobList, timeEntries, wipTargetAmount ] = await Promise.all(
+            const [departments, services, jobs, times, bussiness, userDepartments, clientServices, clientBussiness, jobList, timeEntries, wipTargetAmount, jobWipTarget, clientWipTarget ] = await Promise.all(
                 [
                     DepartmentCategoryModel.find({ companyId }).lean(),
                     ServicesCategoryModel.find({ companyId }).lean(),
@@ -198,7 +215,9 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
                     ClientModel.find({}, { _id: 1, businessTypeId: 1 }).lean(),
                     JobModel.find({}, { jobTypeId: 1 }).lean(),
                     TimeEntryModel.find({ companyId }, { _id: 1, timeCategoryId: 1 }).lean(),
-                    WipTragetAmountsModel.find({ companyId }).lean()
+                    WipTragetAmountsModel.find({ companyId }).lean(),
+                    JobModel.find({companyId, wipTargetId: { $exists: true }}, { _id: 1, wipTargetId: 1 }).lean(),
+                    ClientModel.find({companyId, wipTargetId: { $exists: true }}, { _id: 1, wipTargetId: 1 }).lean(),
                 ]);
             departments.forEach((department: any) => {
                 department.count = userDepartments.filter((team: any) => team.departmentId.toString() === department._id.toString()).length
@@ -217,8 +236,13 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             })
 
             wipTargetAmount.forEach((traget: any) => {
-                traget.count = 0
+                let count =0;
+                count += jobWipTarget.filter((job: any) => job.wipTargetId.toString() === traget._id.toString()).length
+                count += clientWipTarget.filter((client: any) => client.wipTargetId.toString() === traget._id.toString()).length
+                traget.count = count
             })
+           
+            console.log("jobWipTarget", jobWipTarget, clientWipTarget);
 
             SUCCESS(res, 200, "Categories fetched successfully", { data: { departments, services, jobs, times, bussiness, wipTargetAmount } });
             return;

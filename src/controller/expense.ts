@@ -17,7 +17,7 @@ const createExpense = async (req: Request, res: Response, next: NextFunction): P
         req.body.companyId = req.user.companyId;
         req.body.submittedBy = req.userId;
         req.body.netAmount = Number(req.body.netAmount) || 0;
-        req.body.vatPercentage = Number(vatPercentage) || 5;
+        req.body.vatPercentage = Number(vatPercentage) || 0;
         req.body.vatAmount = Number(vatAmount) || (req.body.netAmount * (req.body.vatPercentage / 100));
         req.body.totalAmount = Number(totalAmount) || (req.body.netAmount + req.body.vatAmount);
         if (type == 'team') {

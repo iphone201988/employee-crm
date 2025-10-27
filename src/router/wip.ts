@@ -5,5 +5,8 @@ import wipController from "../controller/wip";
 const wipRouter = express.Router();
 
 
-wipRouter.get("/all", authenticate, wipController.workInProgress);
+wipRouter.post("/open-balance", authenticate, wipController.createOpenWipBalance);
+wipRouter.get("/", authenticate, wipController.workInProgress);
+wipRouter.get("/age-wip", authenticate, wipController.wipBalance);
+wipRouter.post("/attach-wip-target", authenticate, wipController.attachWipTarget);
 export default wipRouter;

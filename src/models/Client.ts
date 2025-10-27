@@ -19,6 +19,7 @@ export interface IClient extends Document {
   status: string;
   services: Schema.Types.ObjectId[];
   jobCategories: Schema.Types.ObjectId[];
+  wipTargetId: Schema.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 
@@ -42,8 +43,8 @@ const ClientSchema: Schema = new Schema<IClient>(
       trim: true,
     },
     businessTypeId: {
-        type: Schema.Types.ObjectId,
-        ref: 'BusinessCategory',
+      type: Schema.Types.ObjectId,
+      ref: 'BusinessCategory',
     },
     taxNumber: {
       type: String,
@@ -113,6 +114,10 @@ const ClientSchema: Schema = new Schema<IClient>(
         ref: 'JobCategory',
       },
     ],
+    wipTargetId: {
+      type: Schema.Types.ObjectId,
+      ref: 'WipTragetAmounts',
+    }
   },
   {
     timestamps: true,

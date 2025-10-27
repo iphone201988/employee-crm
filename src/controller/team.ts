@@ -16,6 +16,8 @@ import { ClientModel } from "../models/Client";
 import { JobModel } from "../models/Job";
 import { SettingModel } from "../models/Setting";
 import { getWIPDashboardData } from "./wip";
+import { WipTragetAmountsModel } from "../models/WIPTargetAmounts";
+import { TimeLogModel } from "../models/TImeLog";
 
 const uploadImage = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -244,7 +246,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
         const companyId = req.user.companyId;
         if (type === "all") {
 
-            const [departments, services, jobs, times, bussiness, teams, clients, jobList, companies] = await Promise.all(
+            const [departments, services, jobs, times, bussiness, teams, clients, jobList, companies, wipTargetAmount] = await Promise.all(
                 [
                     DepartmentCategoryModel.find({ companyId }, { _id: 1, name: 1, }).lean(),
                     ServicesCategoryModel.find({ companyId }, { _id: 1, name: 1, }).lean(),
@@ -255,6 +257,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
                     ClientModel.find({ companyId, status: "active" }, { _id: 1, name: 1, }).lean(),
                     JobModel.find({ companyId, }, { _id: 1, name: 1, clientId: 1 }).lean(),
                     UserModel.find({ role: "company" }, { _id: 1, name: 1, }).lean(),
+                    WipTragetAmountsModel.find({ companyId }, { _id: 1, amount: 1, }).lean(),
                 ]);
             data.departments = departments;
             data.services = services;
@@ -265,6 +268,7 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
             data.clients = clients;
             data.jobList = jobList;
             data.companies = companies
+            data.wipTargetAmount = wipTargetAmount
 
         } else if (type === "department") {
             data.departments = await DepartmentCategoryModel.find({ companyId }, { _id: 1, name: 1, }).lean();
@@ -285,8 +289,11 @@ const dropdownOptions = async (req: Request, res: Response, next: NextFunction):
         } else if (type === "jobList") {
             let query: any = { companyId };
             if (clientId) query.clientId = clientId;
-            data.jobs = await JobModel.find(query, { _id: 1, name: 1, clientId: 1}).lean();
-        } else {
+            data.jobs = await JobModel.find(query, { _id: 1, name: 1, clientId: 1 }).lean();
+        } else if (type === "wipTargetAmount") {
+            data.wipTargetAmount = await WipTragetAmountsModel.find({ companyId }, { _id: 1, amount: 1, }).lean();
+        }
+        else {
             throw new BadRequestError("Invalid type");
         }
         SUCCESS(res, 200, "fetched successfully", { data });
@@ -575,4 +582,362 @@ const updateSettings = async (req: Request, res: Response, next: NextFunction): 
         next(error);
     }
 };
-export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions, getAccessOftabs, addCompany, getAllCompanyMembers, getCompanyById, companyTeamMembers, updateSettings };
+const reports = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        let { startDate, endDate, periodType, page, limit } = req.query;
+        const companyId = req.user.companyId;
+        
+        if (!startDate || !endDate || !periodType) {
+            return res.status(400).json({
+                success: false,
+                message: 'startDate, endDate, and periodType are required'
+            });
+        }
+
+        if (!['daily', 'weekly', 'monthly', 'yearly'].includes(periodType as string)) {
+            return res.status(400).json({
+                success: false,
+                message: 'periodType must be one of: daily, weekly, monthly, yearly'
+            });
+        }
+
+        const pageNumber = parseInt(page as string) || 1;
+        const limitNumber = parseInt(limit as string) || 10;
+        const skip = (pageNumber - 1) * limitNumber;
+        
+        const dateGrouping = getDateGrouping(periodType);
+        const newStartDate = new Date(startDate as string);
+        const newEndDate = new Date(endDate as string);
+        
+        // Build the common pipeline stages (before pagination)
+        const commonPipeline: any[] = [
+            {
+                $match: {
+                    companyId: companyId,
+                    date: {
+                        $gte: newStartDate,
+                        $lte: newEndDate
+                    }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'userId',
+                    foreignField: '_id',
+                    as: 'userDetails'
+                }
+            },
+            {
+                $unwind: '$userDetails'
+            },
+            {
+                $addFields: {
+                    dayOfWeek: { $dayOfWeek: '$date' }
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        period: dateGrouping,
+                        userId: '$userId'
+                    },
+                    name: { $first: '$userDetails.name' },
+                    avatarUrl: { $first: '$userDetails.avatarUrl' },
+                    workSchedule: { $first: '$userDetails.workSchedule' },
+                    hourlyRate: { $first: '$userDetails.hourlyRate' },
+                    billableRate: { $first: '$userDetails.billableRate' },
+                    dayOfWeek: { $first: '$dayOfWeek' },
+                    totalLoggedDuration: {
+                        $sum: '$duration'
+                    },
+                    billableHours: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$billable', true] },
+                                '$duration',
+                                0
+                            ]
+                        }
+                    },
+                    billableAmount: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$billable', true] },
+                                '$amount',
+                                0
+                            ]
+                        }
+                    },
+                    nonBillableHours: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$billable', false] },
+                                '$duration',
+                                0
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                $addFields: {
+                    capacity: {
+                        $cond: [
+                            { $eq: [periodType, 'daily'] },
+                            {
+                                $switch: {
+                                    branches: [
+                                        {
+                                            case: { $eq: ['$dayOfWeek', 1] },
+                                            then: { $ifNull: ['$workSchedule.sunday', 0] }
+                                        },
+                                        {
+                                            case: { $eq: ['$dayOfWeek', 2] },
+                                            then: { $ifNull: ['$workSchedule.monday', 0] }
+                                        },
+                                        {
+                                            case: { $eq: ['$dayOfWeek', 3] },
+                                            then: { $ifNull: ['$workSchedule.tuesday', 0] }
+                                        },
+                                        {
+                                            case: { $eq: ['$dayOfWeek', 4] },
+                                            then: { $ifNull: ['$workSchedule.wednesday', 0] }
+                                        },
+                                        {
+                                            case: { $eq: ['$dayOfWeek', 5] },
+                                            then: { $ifNull: ['$workSchedule.thursday', 0] }
+                                        },
+                                        {
+                                            case: { $eq: ['$dayOfWeek', 6] },
+                                            then: { $ifNull: ['$workSchedule.friday', 0] }
+                                        },
+                                        {
+                                            case: { $eq: ['$dayOfWeek', 7] },
+                                            then: { $ifNull: ['$workSchedule.saturday', 0] }
+                                        }
+                                    ],
+                                    default: 0
+                                }
+                            },
+                            {
+                                $cond: [
+                                    { $eq: [periodType, 'weekly'] },
+                                    {
+                                        $add: [
+                                            { $ifNull: ['$workSchedule.monday', 0] },
+                                            { $ifNull: ['$workSchedule.tuesday', 0] },
+                                            { $ifNull: ['$workSchedule.wednesday', 0] },
+                                            { $ifNull: ['$workSchedule.thursday', 0] },
+                                            { $ifNull: ['$workSchedule.friday', 0] },
+                                            { $ifNull: ['$workSchedule.saturday', 0] },
+                                            { $ifNull: ['$workSchedule.sunday', 0] }
+                                        ]
+                                    },
+                                    {
+                                        $cond: [
+                                            { $eq: [periodType, 'monthly'] },
+                                            {
+                                                $multiply: [
+                                                    {
+                                                        $add: [
+                                                            { $ifNull: ['$workSchedule.monday', 0] },
+                                                            { $ifNull: ['$workSchedule.tuesday', 0] },
+                                                            { $ifNull: ['$workSchedule.wednesday', 0] },
+                                                            { $ifNull: ['$workSchedule.thursday', 0] },
+                                                            { $ifNull: ['$workSchedule.friday', 0] },
+                                                            { $ifNull: ['$workSchedule.saturday', 0] },
+                                                            { $ifNull: ['$workSchedule.sunday', 0] }
+                                                        ]
+                                                    },
+                                                    4.33
+                                                ]
+                                            },
+                                            {
+                                                $multiply: [
+                                                    {
+                                                        $add: [
+                                                            { $ifNull: ['$workSchedule.monday', 0] },
+                                                            { $ifNull: ['$workSchedule.tuesday', 0] },
+                                                            { $ifNull: ['$workSchedule.wednesday', 0] },
+                                                            { $ifNull: ['$workSchedule.thursday', 0] },
+                                                            { $ifNull: ['$workSchedule.friday', 0] },
+                                                            { $ifNull: ['$workSchedule.saturday', 0] },
+                                                            { $ifNull: ['$workSchedule.sunday', 0] }
+                                                        ]
+                                                    },
+                                                    52
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    writeOff: { $literal: 0 }
+                }
+            },
+            {
+                $project: {
+                    period: '$_id.period',
+                    userId: '$_id.userId',
+                    name: 1,
+                    avatarUrl: 1,
+                    hourlyRate: '$hourlyRate',
+                    capacity: { $round: ['$capacity', 2] },
+                    logged: { $round: ['$totalLoggedDuration', 2] },
+                    billable: { $round: ['$billableHours', 2] },
+                    billableAmount: { $round: ['$billableAmount', 2] },
+                    nonBillable: { $round: ['$nonBillableHours', 2] },
+                    writeOff: 1,
+                }
+            },
+            {
+                $sort: { period: 1, name: 1 }
+            }
+        ];
+
+        // Use $facet to get paginated data, total count, and global totals
+        const result = await TimeLogModel.aggregate([
+            ...commonPipeline,
+            {
+                $facet: {
+                    // Paginated data
+                    paginatedData: [
+                        { $skip: skip },
+                        { $limit: limitNumber }
+                    ],
+                    
+                    // Total count for pagination metadata
+                    totalCount: [
+                        { $count: 'count' }
+                    ],
+                    
+                    // Global totals (across ALL records, not just current page)
+                    globalTotals: [
+                        {
+                            $group: {
+                                _id: null,
+                                totalCapacity: { $sum: '$capacity' },
+                                totalLogged: { $sum: '$logged' },
+                                totalRevenue: { $sum: '$billableAmount' },
+                                uniqueUsers: { $addToSet: '$userId' }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $project: {
+                    paginatedData: 1,
+                    totalCount: { $arrayElemAt: ['$totalCount.count', 0] },
+                    globalTotals: { $arrayElemAt: ['$globalTotals', 0] }
+                }
+            }
+        ]);
+
+        // Extract results
+        const paginatedData = result[0]?.paginatedData || [];
+        const totalCount = result[0]?.totalCount || 0;
+        const globalTotals = result[0]?.globalTotals || {
+            totalCapacity: 0,
+            totalLogged: 0,
+            totalRevenue: 0,
+            uniqueUsers: []
+        };
+
+        // Format the paginated results
+        const formattedReports = paginatedData.map((log:any) => ({
+            // period: formatPeriod(log.period, periodType),
+            name: log.name,
+            userId: log.userId,
+            hourlyRate: log.hourlyRate,
+            capacity: log.capacity,
+            logged: log.logged,
+            billable: log.billable,
+            billableAmount: log.billableAmount,
+            nonBillable: log.nonBillable,
+            writeOff: log.writeOff,
+        }));
+
+        // Calculate total pages
+        const totalPages = Math.ceil(totalCount / limitNumber);
+
+        const data = {
+            periodType,
+            startDate: newStartDate,
+            endDate: newEndDate,
+            
+            // Global totals (across ALL records in the date range)
+            totalCapacity: parseFloat((globalTotals.totalCapacity || 0).toFixed(2)),
+            totalLogged: parseFloat((globalTotals.totalLogged || 0).toFixed(2)),
+            totalRevenue: parseFloat((globalTotals.totalRevenue || 0).toFixed(2)),
+            teamMembers: globalTotals.uniqueUsers?.length || 0,
+            
+            // Paginated results
+            reports: formattedReports,
+            
+            // Pagination metadata
+            pagination: {
+                total: totalCount,
+                page: pageNumber,
+                limit: limitNumber,
+            }
+        };
+
+        res.json({
+            success: true,
+            data: data
+        });
+    } catch (error: any) {
+        console.error('Error generating period report:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to generate period report',
+            error: error.message
+        });
+    }
+};
+
+
+
+// Generate date grouping based on period type
+function getDateGrouping(periodType: any) {
+    switch (periodType) {
+        case 'daily':
+            return {
+                year: { $year: '$date' },
+                month: { $month: '$date' },
+                day: { $dayOfMonth: '$date' }
+            };
+        case 'weekly':
+            return {
+                year: { $isoWeekYear: '$date' },
+                week: { $isoWeek: '$date' }
+            };
+        case 'monthly':
+            return {
+                year: { $year: '$date' },
+                month: { $month: '$date' }
+            };
+        case 'yearly':
+            return {
+                year: { $year: '$date' }
+            };
+    }
+}
+// Format period string for display
+function formatPeriod(groupId: any, periodType: any): any {
+    switch (periodType) {
+        case 'daily':
+            return `${groupId.year}-${String(groupId.month).padStart(2, '0')}-${String(groupId.day).padStart(2, '0')}`;
+        case 'weekly':
+            return `${groupId.year}-W${String(groupId.week).padStart(2, '0')}`;
+        case 'monthly':
+            return `${groupId.year}-${String(groupId.month).padStart(2, '0')}`;
+        case 'yearly':
+            return `${groupId.year}`;
+    }
+}
+export default { uploadImage, addTeamMember, getAllTeamMembers, sendInviteToTeamMember, updateTeamMembers, setPassword, dropdownOptions, getAccessOftabs, addCompany, getAllCompanyMembers, getCompanyById, companyTeamMembers, updateSettings, reports };
