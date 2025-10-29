@@ -4,6 +4,7 @@ import { BadRequestError } from "../utils/errors";
 import { SUCCESS } from "../utils/response";
 import { JobModel } from "../models/Job";
 import { ObjectId } from "../utils/utills";
+import { TimeLogModel } from "../models/TImeLog";
 
 const createJob = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -449,7 +450,20 @@ const getJobById = async (req: Request, res: Response, next: NextFunction): Prom
             .populate('jobManagerId', 'name email department')
             .populate('teamMembers', 'name email department')
             .populate('createdBy', 'name email');
-        SUCCESS(res, 200, "Job fetched successfully", { data: job });
+        const timeLogs = await TimeLogModel.aggregate([
+            { $match: { jobId: ObjectId(jobId) } },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'userId',
+                    foreignField: '_id',
+                    as: 'user',
+                    pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1 } }]
+                }
+            },
+            { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } }
+        ]);
+        SUCCESS(res, 200, "Job fetched successfully", { data: job, timeLogs });
     } catch (error) {
         console.log("error in getJobById", error);
         next(error);

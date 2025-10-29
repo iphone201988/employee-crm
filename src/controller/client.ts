@@ -6,6 +6,10 @@ import { ServicesCategoryModel } from "../models/ServicesCategory";
 import { BadRequestError } from "../utils/errors";
 import { ObjectId } from "../utils/utills";
 import { JobCategoryModel } from "../models/JobCategory";
+import { TimeLogModel } from "../models/TImeLog";
+import { JobModel } from "../models/Job";
+import { ExpensesModel } from "../models/Expenses";
+import job from "./job";
 
 
 
@@ -140,8 +144,119 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
                     as: 'businessTypeId'
                 }
             }
-        ])
-        SUCCESS(res, 200, "Client fetched successfully", { data: client });
+        ]);
+        const timeLogs = await TimeLogModel.aggregate([
+            {
+                $match: { clientId: ObjectId(clientId) }
+            },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "userId",
+                    foreignField: "_id",
+                    as: "user",
+                    pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1 } }]
+                }
+            },
+            { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "timelogcategories",
+                    localField: "timeLogCategoryId",
+                    foreignField: "_id",
+                    as: "timeLogCategory",
+                    pipeline: [{ $project: { _id: 1, name: 1 } }]
+                }
+            }, {
+                $unwind: { path: "$timeLogCategory", preserveNullAndEmptyArrays: true }
+            },
+            {
+                $lookup: {
+                    from: "clients",
+                    localField: "clientId",
+                    foreignField: "_id",
+                    as: "client",
+                    pipeline: [{ $project: { _id: 1, name: 1, clientRef: 1 } }]
+                }
+            },
+            { $unwind: { path: "$client", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "jobs",
+                    localField: "jobId",
+                    foreignField: "_id",
+                    as: "job",
+                    pipeline: [{ $project: { _id: 1, name: 1 } }]
+                }
+            },
+            { $unwind: { path: "$job", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "jobcategories",
+                    localField: "jobCategoryId",
+                    foreignField: "_id",
+                    as: "jobCategory",
+                    pipeline: [{ $project: { _id: 1, name: 1 } }]
+                }
+            },
+            { $unwind: { path: "$jobCategory", preserveNullAndEmptyArrays: true } },
+        ]);
+
+        const jobs = await JobModel.aggregate([
+            {
+                $match: { clientId: ObjectId(clientId) }
+            },
+            {
+                $lookup: {
+                    from: "timelogs",
+                    localField: "_id",
+                    foreignField: "jobId",
+                    as: "timeLogs",
+                    pipeline: [{
+                        $lookup: {
+                            from: "timecategories",
+                            localField: "timeLogCategoryId",
+                            foreignField: "_id",
+                            as: "timeLogCategory",
+                            pipeline: [{ $project: { _id: 1, name: 1 } }]
+                        }
+                    }, {
+                        $unwind: {
+                            path: "$timeLogCategory", preserveNullAndEmptyArrays: true
+                        }
+                    }]
+                }
+            },
+            {
+                $addFields: {
+                    totalTimeLogHours: { $sum: "$timeLogs.duration" },
+                    amount: { $sum: "$timeLogs.amount" }
+                }
+            }
+        ]);
+        const expenses = await ExpensesModel.aggregate([
+            { $match: { clientId: ObjectId(clientId) } }
+        ]);
+         const wip = await JobModel.aggregate([
+            { $match: { clientId: ObjectId(clientId)} },
+            {
+                $lookup:{
+                    from: "timelogs",
+                    localField: "_id",
+                    foreignField: "jobId",
+                    as: "timeLogs",
+                }
+            },
+            {
+                $addFields: {
+                    totalTimeLogHours: { $sum: "$timeLogs.duration" },
+                    amount: { $sum: "$timeLogs.amount" }
+                }
+            }
+            
+         ]);
+
+        SUCCESS(res, 200, "Client fetched successfully", { data: client, timeLogs, jobs, expenses, wip });
     } catch (error) {
         console.log("error in getClientById", error);
         next(error);
@@ -166,7 +281,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
         const skip = (page - 1) * limit;
         const companyId = req.user.companyId;
         // Build search query
-        const query: any = {status: "active",companyId};
+        const query: any = { status: "active", companyId };
         if (search) {
             query.$or = [
                 { clientName: { $regex: search, $options: 'i' } },
@@ -178,7 +293,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
         }
 
         // Get all available job categories
-        const allJobCategories = await JobCategoryModel.find({companyId}, 'name _id').lean();
+        const allJobCategories = await JobCategoryModel.find({ companyId }, 'name _id').lean();
         const selectedJobCategories = allJobCategories.map(s => s._id);
 
         // Build dynamic projection with job category toggles
@@ -291,7 +406,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
 
                     // Global job category counts for all clients (for UI breakdown cards)
                     globalJobCategoriesCounts: [
-                        { $match: {status: "active",companyId}},
+                        { $match: { status: "active", companyId } },
                         { $unwind: '$jobCategories' },
                         {
                             $group: {
@@ -349,7 +464,7 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
 
         const completeGlobalCounts = allJobCategories.map(service => ({
             jobCategoryId: service._id,
-           jobCategoryName: service.name,
+            jobCategoryName: service.name,
             count: globalCountsMap.get(service._id.toString()) || 0
         }));
 

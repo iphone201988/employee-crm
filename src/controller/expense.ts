@@ -139,7 +139,7 @@ const getExpenses = async (req: Request, res: Response, next: NextFunction): Pro
                             localField: "submittedBy",
                             foreignField: "_id",
                             as: "submittedDetails",
-                            pipeline: [{ $project: { name: 1, _id: 1, } }],
+                            pipeline: [{ $project: { name: 1, _id: 1, avatarUrl: 1 } }],
                         }
                     },
                     {

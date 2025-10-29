@@ -14,6 +14,7 @@ import { WipOpenBalanceModel } from '../models/wipOpenBalance';
 import { TimeLogModel } from '../models/TImeLog';
 import { WipTragetAmountsModel } from '../models/WIPTargetAmounts';
 import { BadRequestError, NotFoundError } from '../utils/errors';
+import { SettingModel } from '../models/Setting';
 
 // Main function to get WIP data
 export async function getWIPDashboardData(companyId: string) {
@@ -506,14 +507,29 @@ const createOpenWipBalance = async (req: Request, res: Response, next: NextFunct
 const workInProgress = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const companyId = req.user.companyId;
-        const wipData = await ClientModel.aggregate([
-            {
-                $match: {
-                    companyId: new mongoose.Types.ObjectId(companyId),
-                    status: 'active'
-                }
-            },
 
+        // Pagination params
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const skip = (page - 1) * limit;
+        const setting = await SettingModel.findOne({ companyId: req.user.companyId });
+        const WIPWarningJobs = req.query.WIPWarningJobs as string === "true"
+        const wipTargetPercent = setting?.wipWarningPercentage || 80;
+        const targetMetCondition = req.query.targetMetCondition as string || undefined; // 1,2 
+        // 🧠 Base client match condition
+        const baseMatch: any = {
+            companyId: new mongoose.Types.ObjectId(companyId),
+            status: 'active'
+        };
+        if (req.query.serach) {
+            const searchRegex = new RegExp(`^${req.query.serach}`, 'i');
+            baseMatch.name = { $regex: searchRegex };
+        }
+        // Main pipeline
+        const pipeline: any[] = [
+            { $match: baseMatch },
+
+            // --- your same full lookup logic ---
             {
                 $lookup: {
                     from: 'jobs',
@@ -559,22 +575,14 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                 as: 'wipData'
                             }
                         },
+
                         {
                             $addFields: {
-                                wipAmount: {
-                                    $ifNull: [
-                                        { $arrayElemAt: ['$wipData.wipAmount', 0] },
-                                        0
-                                    ]
-                                },
-                                wipDuration: {
-                                    $ifNull: [
-                                        { $arrayElemAt: ['$wipData.wipDuration', 0] },
-                                        0
-                                    ]
-                                }
+                                wipAmount: { $ifNull: [{ $arrayElemAt: ['$wipData.wipAmount', 0] }, 0] },
+                                wipDuration: { $ifNull: [{ $arrayElemAt: ['$wipData.wipDuration', 0] }, 0] }
                             }
                         },
+
                         {
                             $lookup: {
                                 from: 'wipopenbalances',
@@ -585,18 +593,15 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                         },
                         {
                             $addFields: {
-                                wipTotalOpenBalance: {
-                                    $sum: '$wipopenbalances.amount'
-                                }
-
+                                wipTotalOpenBalance: { $sum: '$wipopenbalances.amount' }
                             }
                         },
                         {
-                            $lookup:{
-                                from:'wiptragetamounts',
-                                localField:'wipTargetId',
-                                foreignField:'_id',
-                                as:'jobWipTraget'
+                            $lookup: {
+                                from: 'wiptragetamounts',
+                                localField: 'wipTargetId',
+                                foreignField: '_id',
+                                as: 'jobWipTraget'
                             }
                         },
                         {
@@ -605,7 +610,85 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                 preserveNullAndEmptyArrays: true
                             }
                         },
-
+                        {
+                            $addFields: {
+                                jobFeePercentage: {
+                                    $cond: [
+                                        { $gt: ["$jobCost", 0] },
+                                        { $multiply: [{ $divide: ["$wipAmount", "$jobCost"] }, 100] },
+                                        0
+                                    ]
+                                },
+                                targetAmount: { $ifNull: ["$jobWipTraget.amount", 0] },
+                                targetMet: {
+                                    $cond: [
+                                        { $gt: ["$wipAmount", "$jobWipTraget.amount"] },
+                                        "2",
+                                        "1"
+                                    ]
+                                }
+                            }
+                        },
+                        // ...(targetMetCondition
+                        //     ? [
+                        //         {
+                        //             $match: {
+                        //                 targetMet: targetMetCondition
+                        //             }
+                        //         }
+                        //     ]
+                        //     : []),
+                        // user breakdown per job
+                        {
+                            $lookup: {
+                                from: 'timelogs',
+                                localField: '_id',
+                                foreignField: 'jobId',
+                                as: 'wipBreakdown',
+                                pipeline: [
+                                    {
+                                        $lookup: {
+                                            from: 'users',
+                                            localField: 'userId',
+                                            foreignField: '_id',
+                                            as: 'user'
+                                        }
+                                    },
+                                    { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+                                    {
+                                        $lookup: {
+                                            from: 'jobs',
+                                            localField: 'jobId',
+                                            foreignField: '_id',
+                                            as: 'job'
+                                        }
+                                    },
+                                    { $unwind: { path: '$job', preserveNullAndEmptyArrays: true } },
+                                    {
+                                        $group: {
+                                            _id: '$userId',
+                                            userName: { $first: '$user.name' },
+                                            billableRate: { $first: '$rate' },
+                                            totalHours: { $sum: '$duration' },
+                                            totalAmount: { $sum: '$amount' },
+                                            tasks: {
+                                                $push: {
+                                                    timeLogId: '$_id',
+                                                    description: '$description',
+                                                    date: '$date',
+                                                    jobTypeId: '$job.jobTypeId',
+                                                    jobName: '$job.name',
+                                                    duration: '$duration',
+                                                    rate: '$rate',
+                                                    amount: '$amount'
+                                                }
+                                            }
+                                        }
+                                    },
+                                    { $sort: { userName: 1 } }
+                                ]
+                            }
+                        },
                         {
                             $project: {
                                 _id: 1,
@@ -619,8 +702,11 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                 wipDuration: 1,
                                 wipopenbalances: 1,
                                 wipTotalOpenBalance: 1,
-                                jobWipTraget:1
-
+                                jobWipTraget: 1,
+                                wipBreakdown: 1,
+                                jobFeePercentage: 1,
+                                targetMet: 1,
+                                targetAmount: 1
                             }
                         }
                     ],
@@ -628,11 +714,178 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                 }
             },
 
-
-
+            // total client WIP amount = sum of job wipAmount
+            {
+                $addFields: {
+                    clientTotalWipAmount: { $sum: '$jobs.wipAmount' },
+                    clientTotalWipJobs: { $size: '$jobs' }
+                }
+            },
+            {
+                $lookup:
+                {
+                    from: 'expenses',
+                    let: {
+                        clientId: '$_id',
+                        companyId: '$companyId'
+                    },
+                    pipeline: [
+                        {
+                            $match:
+                            {
+                                $expr:
+                                {
+                                    $and: [
+                                        { $eq: ['$clientId', '$$clientId'] },
+                                        { $eq: ['$companyId', '$$companyId'] }
+                                    ]
+                                }
+                            }
+                        },], as: 'expensesData'
+                }
+            }, {
+                $addFields:
+                    { totalExpenses: { $sum: '$expensesData.totalAmount' } }
+            },
+            {
+                $lookup:
+                {
+                    from: 'wipopenbalances', localField: '_id', foreignField: 'clientId',
+                    as: 'clientWipOpenBalance'
+                }
+            }, {
+                $addFields:
+                    { clientWipTotalOpenBalance: { $sum: '$clientWipOpenBalance.amount' } }
+            }, {
+                $lookup:
+                {
+                    from: 'wiptragetamounts', localField: 'wipTargetId', foreignField: '_id',
+                    as: 'clientWipTraget'
+                }
+            }, {
+                $unwind: {
+                    path: '$clientWipTraget',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $addFields: {
+                    clientTargetAmount: { $ifNull: ['$clientWipTraget.amount', 0] },
+                    clientTargetMet: {
+                        $cond: {
+                            if: { $gt: ['$clientTotalWipAmount', '$clientTargetAmount'] },
+                            then: '2',
+                            else: '1'
+                        }
+                    }
+                }
+            },
             {
                 $lookup: {
-                    from: 'expenses',
+                    from: "timelogs",
+                    let: { clientId: '$_id', companyId: '$companyId' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [{ $eq: ['$clientId', '$$clientId'] },
+                                    { $eq: ['$companyId', '$$companyId'] }]
+                                }
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: 'jobs', localField: 'jobId',
+                                foreignField: '_id', as: 'job'
+                            }
+                        }, {
+                            $unwind: {
+                                path: '$job',
+                                preserveNullAndEmptyArrays: true
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: "users",
+                                localField: "userId",
+                                foreignField: "_id",
+                                as: "user"
+                            }
+                        }, {
+                            $unwind: {
+                                path: '$user',
+                                preserveNullAndEmptyArrays: true
+                            }
+                        }, {
+                            $group:
+                            {
+                                _id: "$userId",
+                                userName: { $first: "$user.name" },
+                                billableRate: { $first: "$rate" },
+                                totalHours: { $sum: "$duration" },
+                                totalAmount: { $sum: "$amount" },
+                                tasks: {
+                                    $push: {
+                                        timeLogId: "$_id",
+                                        description: "$description",
+                                        date: "$date",
+                                        jobTypeId: "$job.jobTypeId",
+                                        jobName: "$job.name",
+                                        duration: "$duration",
+                                        rate: "$rate",
+                                        amount: "$amount"
+                                    }
+                                }
+                            }
+                        }, { $sort: { userName: 1 } }],
+                    as: "wipBreakdown"
+                }
+            },
+            ...(WIPWarningJobs ? [
+                {
+                    $match: {
+                        "jobs.jobFeePercentage": { $gte: wipTargetPercent }
+                    }
+                }] : []),
+            ...(targetMetCondition ? [
+                {
+                    $match: {
+                        clientTargetMet: targetMetCondition
+                    }
+                }
+
+            ] : []),
+
+            {
+                $facet: {
+                    data: [
+
+                        {
+                            $sort: { name: 1 }
+                        },
+
+
+                        // Pagination
+                        { $skip: skip },
+                        { $limit: limit }
+                    ],
+                    totalCount: [{ $count: 'count' }]
+                }
+            },
+
+        ];
+
+        // Get paginated clients
+        const result = await ClientModel.aggregate(pipeline).collation({ locale: "en", strength: 2 });
+        const wipData = result[0].data;
+        const totalCount = result[0].totalCount[0]?.count || 0;
+
+        // Get total counts and summary for dashboard
+        const summary = await ClientModel.aggregate([
+            { $match: baseMatch },
+            {
+                $lookup: {
+                    from: 'jobs',
                     let: { clientId: '$_id', companyId: '$companyId' },
                     pipeline: [
                         {
@@ -640,91 +893,109 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                 $expr: {
                                     $and: [
                                         { $eq: ['$clientId', '$$clientId'] },
-                                        { $eq: ['$companyId', '$$companyId'] }
+                                        { $eq: ['$companyId', '$$companyId'] },
+                                        {
+                                            $in: ['$status', ['queued', 'inProgress', 'withClient', 'forApproval']]
+                                        }
                                     ]
                                 }
                             }
                         },
                         {
-                            $group: {
-                                _id: '$clientId',
-                                totalExpenses: { $sum: '$totalAmount' },
-
+                            $lookup: {
+                                from: 'timelogs',
+                                let: { jobId: '$_id', companyId: '$companyId' },
+                                pipeline: [
+                                    {
+                                        $match: {
+                                            $expr: {
+                                                $and: [
+                                                    { $eq: ['$jobId', '$$jobId'] },
+                                                    { $eq: ['$companyId', '$$companyId'] },
+                                                    { $eq: ['$billable', true] }
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    { $group: { _id: null, wipAmount: { $sum: '$amount' } } }
+                                ],
+                                as: 'jobWip'
                             }
                         },
                         {
-                            $project: {
-                                _id: 0,
-                                totalExpenses: 1,
+                            $addFields: {
+                                wipAmount: {
+                                    $ifNull: [{ $arrayElemAt: ['$jobWip.wipAmount', 0] }, 0]
+                                }
                             }
                         }
-
                     ],
-                    as: 'expensesData'
+                    as: 'jobs'
                 }
             },
-            {
-                $addFields: {
-                    expensesData: { $arrayElemAt: ['$expensesData', 0] }
-                }
-            },
+
             {
                 $lookup: {
-                    from: 'wipopenbalances',
-                    localField: '_id',
-                    foreignField: 'clientId',
-                    as: 'clientWipOpenBalance'
+                    from: 'wiptragetamounts',
+                    localField: 'wipTargetId',
+                    foreignField: '_id',
+                    as: 'clientWipTraget'
                 }
-            }, {
+            },
+            { $unwind: { path: '$clientWipTraget', preserveNullAndEmptyArrays: true } },
+            {
                 $addFields: {
-                    clientWipTotalOpenBalance: {
-                        $sum: '$clientWipOpenBalance.amount'
+                    targetMet:
+                    {
+                        $cond: {
+                            if: {
+                                $gt:
+                                    [{ $sum: '$jobs.wipAmount' }, '$clientWipTraget.amount']
+                            },
+                            then: '2',
+                            else: '1'
+                        }
+                    },
+                    clientWipAmount: { $sum: '$jobs.wipAmount' }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalClients: { $sum: 1 },
+                    totalJobs: { $sum: { $size: '$jobs' } },
+                    totalWipAmount: { $sum: { $sum: '$jobs.wipAmount' } },
+                    // amount those who are target met 2
+                    totalInvoicedAmount: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$targetMet', '2'] },
+                                '$clientWipAmount',
+                                0
+                            ]
+                        }
                     }
                 }
-            },
-            {
-                $lookup:{
-                    from:'wiptragetamounts',
-                    localField:'wipTargetId',
-                    foreignField:'_id',
-                    as:'clientWipTraget'
-                }
-                
-            },{
-                $unwind: {
-                    path: '$clientWipTraget',
-                    preserveNullAndEmptyArrays: true
-                }
-            },
-            {
-                $project: {
-                    _id: 1,
-                    clientRef: 1,
-                    name: 1,
-                    contactName: 1,
-                    email: 1,
-                    phone: 1,
-                    jobs: 1,
-                    expensesData: 1,
-                    companyId: 1,
-                    timelogs: 1,
-                    clientWipTotalOpenBalance: 1,
-                    clientWipOpenBalance: 1,
-                    clientWipTraget:1
-
-                },
-            },
-
-            {
-                $sort: { clientName: 1 }
             }
         ]);
-        SUCCESS(res, 200, "Work in progress data fetched successfully", { data: wipData });
+
+        const summaryData = summary[0] || {
+            totalClients: 0,
+            totalJobs: 0,
+            totalWipAmount: 0
+        };
+
+        SUCCESS(res, 200, "Work in progress data fetched successfully", {
+            data: wipData,
+            pagination: { page, limit, totalCount },
+            summary: summaryData
+        });
     } catch (error) {
         console.log("error in workInProgress", error);
         next(error);
     }
 };
+
 const wipBalance = async (req: Request, res: Response) => {
     try {
         const {
