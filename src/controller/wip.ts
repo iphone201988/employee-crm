@@ -528,6 +528,27 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
         // Main pipeline
         const pipeline: any[] = [
             { $match: baseMatch },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'campanyId',
+                    foreignField: '_id',
+                    as: 'company',
+                    pipeline: [
+                        {
+                            $project: {
+                                _id: 1,
+                                name: 1,
+                                email: 1,
+                            }
+                        }
+                    ]
+            }},{
+                $unwind: {
+                    path: '$company',
+                    preserveNullAndEmptyArrays: true,
+                },
+            },
 
             // --- your same full lookup logic ---
             {
@@ -626,7 +647,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                         "2",
                                         "1"
                                     ]
-                                }
+                                },
                             }
                         },
                         // ...(targetMetCondition
@@ -689,6 +710,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                 ]
                             }
                         },
+
                         {
                             $project: {
                                 _id: 1,
@@ -1002,17 +1024,17 @@ const wipBalance = async (req: Request, res: Response) => {
             startDate,
             endDate,
             clientId,
+            page = '1', // default page number 1
+            limit = '10', // default page size 10
+            search = '',
         }: any = req.query;
 
         const companyId = req.user.companyId;
-
         const currentDate = new Date();
 
-        // Build match conditions
         const matchConditions: any = {
             companyId: companyId,
-            //   status: 'notInvoiced', // Only unbilled/not invoiced time logs
-            billable: true, // Only billable hours
+            billable: true,
         };
 
         if (clientId) {
@@ -1030,105 +1052,17 @@ const wipBalance = async (req: Request, res: Response) => {
             };
         }
 
-        // Aggregation pipeline to calculate WIP balance with aging
-        const wipData = await TimeLogModel.aggregate([
-            {
-                $match: matchConditions,
-            },
+        const pageNumber = parseInt(page, 10);
+        const pageSize = parseInt(limit, 10);
+        const skipCount = (pageNumber - 1) * pageSize;
+
+        // Construct aggregation pipeline
+        const pipeline: any[] = [
+            { $match: matchConditions },
             {
                 $addFields: {
-                    // Calculate days difference from current date
                     daysOld: {
-                        $divide: [
-                            { $subtract: [currentDate, '$date'] },
-                            1000 * 60 * 60 * 24, // Convert milliseconds to days
-                        ],
-                    },
-                },
-            },
-            {
-                $group: {
-                    _id: '$clientId',
-                    wipBalance: { $sum: '$amount' },
-                    days30: {
-                        $sum: {
-                            $cond: [{ $lte: ['$daysOld', 30] }, '$amount', 0],
-                        },
-                    },
-                    days60: {
-                        $sum: {
-                            $cond: [
-                                {
-                                    $and: [
-                                        { $gt: ['$daysOld', 30] },
-                                        { $lte: ['$daysOld', 60] },
-                                    ],
-                                },
-                                '$amount',
-                                0,
-                            ],
-                        },
-                    },
-                    days90: {
-                        $sum: {
-                            $cond: [
-                                {
-                                    $and: [
-                                        { $gt: ['$daysOld', 60] },
-                                        { $lte: ['$daysOld', 90] },
-                                    ],
-                                },
-                                '$amount',
-                                0,
-                            ],
-                        },
-                    },
-                    days120: {
-                        $sum: {
-                            $cond: [
-                                {
-                                    $and: [
-                                        { $gt: ['$daysOld', 90] },
-                                        { $lte: ['$daysOld', 120] },
-                                    ],
-                                },
-                                '$amount',
-                                0,
-                            ],
-                        },
-                    },
-                    days150: {
-                        $sum: {
-                            $cond: [
-                                {
-                                    $and: [
-                                        { $gt: ['$daysOld', 120] },
-                                        { $lte: ['$daysOld', 150] },
-                                    ],
-                                },
-                                '$amount',
-                                0,
-                            ],
-                        },
-                    },
-                    days180: {
-                        $sum: {
-                            $cond: [
-                                {
-                                    $and: [
-                                        { $gt: ['$daysOld', 150] },
-                                        { $lte: ['$daysOld', 180] },
-                                    ],
-                                },
-                                '$amount',
-                                0,
-                            ],
-                        },
-                    },
-                    days180Plus: {
-                        $sum: {
-                            $cond: [{ $gt: ['$daysOld', 180] }, '$amount', 0],
-                        },
+                        $divide: [{ $subtract: [currentDate, '$date'] }, 1000 * 60 * 60 * 24],
                     },
                 },
             },
@@ -1140,9 +1074,74 @@ const wipBalance = async (req: Request, res: Response) => {
                     as: 'clientInfo',
                 },
             },
+            { $unwind: '$clientInfo' },
+            ...(search
+                ? [
+                    {
+                        $match: {
+                            "clientInfo.name": { $regex: new RegExp(search, 'i') },
+                        },
+                    },
+                ]
+                : []),
             {
-                $unwind: '$clientInfo',
+                $group: {
+                    _id: '$clientId',
+                    wipBalance: { $sum: '$amount' },
+                    days30: {
+                        $sum: { $cond: [{ $lte: ['$daysOld', 30] }, '$amount', 0] },
+                    },
+                    days60: {
+                        $sum: {
+                            $cond: [
+                                { $and: [{ $gt: ['$daysOld', 30] }, { $lte: ['$daysOld', 60] }] },
+                                '$amount',
+                                0,
+                            ],
+                        },
+                    },
+                    days90: {
+                        $sum: {
+                            $cond: [
+                                { $and: [{ $gt: ['$daysOld', 60] }, { $lte: ['$daysOld', 90] }] },
+                                '$amount',
+                                0,
+                            ],
+                        },
+                    },
+                    days120: {
+                        $sum: {
+                            $cond: [
+                                { $and: [{ $gt: ['$daysOld', 90] }, { $lte: ['$daysOld', 120] }] },
+                                '$amount',
+                                0,
+                            ],
+                        },
+                    },
+                    days150: {
+                        $sum: {
+                            $cond: [
+                                { $and: [{ $gt: ['$daysOld', 120] }, { $lte: ['$daysOld', 150] }] },
+                                '$amount',
+                                0,
+                            ],
+                        },
+                    },
+                    days180: {
+                        $sum: {
+                            $cond: [
+                                { $and: [{ $gt: ['$daysOld', 150] }, { $lte: ['$daysOld', 180] }] },
+                                '$amount',
+                                0,
+                            ],
+                        },
+                    },
+                    days180Plus: {
+                        $sum: { $cond: [{ $gt: ['$daysOld', 180] }, '$amount', 0] },
+                    },
+                },
             },
+
             {
                 $project: {
                     _id: 0,
@@ -1159,12 +1158,30 @@ const wipBalance = async (req: Request, res: Response) => {
                     days180Plus: { $round: ['$days180Plus', 2] },
                 },
             },
-            {
-                $sort: { clientRef: 1 },
-            },
-        ]);
+            { $sort: { clientRef: 1 } },
+            { $skip: skipCount },
+            { $limit: pageSize },
+        ];
 
-        // Calculate totals
+        // Get paginated data
+        const wipData = await TimeLogModel.aggregate(pipeline);
+
+        // To get total count for pagination metadata, run a count aggregation (without skip & limit):
+        const countPipeline = [
+            { $match: matchConditions },
+            {
+                $group: {
+                    _id: '$clientId',
+                },
+            },
+            {
+                $count: 'totalClients',
+            },
+        ];
+        const countResult = await TimeLogModel.aggregate(countPipeline);
+        const totalClients = countResult.length > 0 ? countResult[0].totalClients : 0;
+
+        // Continue calculating totals for current page (already paginated)
         const totals = wipData.reduce(
             (acc, client) => {
                 acc.wipBalance += client.wipBalance;
@@ -1189,7 +1206,6 @@ const wipBalance = async (req: Request, res: Response) => {
             }
         );
 
-        // Calculate summary cards
         const summary = {
             totalWIPBalance: parseFloat(totals.wipBalance.toFixed(2)),
             current0_30Days: parseFloat(totals.days30.toFixed(2)),
@@ -1219,6 +1235,12 @@ const wipBalance = async (req: Request, res: Response) => {
                     (totals.days180 + totals.days180Plus).toFixed(2)
                 ),
             },
+            pagination: {
+                currentPage: pageNumber,
+                pageSize: pageSize,
+                totalClients,
+                totalPages: Math.ceil(totalClients / pageSize),
+            },
         };
 
         return res.status(200).json({
@@ -1234,6 +1256,7 @@ const wipBalance = async (req: Request, res: Response) => {
         });
     }
 };
+
 
 const attachWipTarget = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
