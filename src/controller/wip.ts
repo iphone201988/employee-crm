@@ -531,7 +531,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
             {
                 $lookup: {
                     from: 'users',
-                    localField: 'campanyId',
+                    localField: 'companyId',
                     foreignField: '_id',
                     as: 'company',
                     pipeline: [
