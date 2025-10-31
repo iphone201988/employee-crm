@@ -34,6 +34,7 @@ const createInvoice = async (req: Request, res: Response, next: NextFunction): P
             amount: newInvoice.totalAmount,
             companyId: req.user.companyId,
             date: date || new Date(),
+            performedBy: req.userId
         });
         SUCCESS(res, 200, "Invoice created successfully", { data: newInvoice });
     } catch (error) {
