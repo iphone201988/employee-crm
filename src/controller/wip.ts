@@ -566,7 +566,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                         { $eq: ['$companyId', '$$companyId'] },
                                         {
                                             $in: ['$status', ['queued', 'inProgress', 'withClient', 'forApproval']]
-                                        }
+                                        },
                                     ]
                                 }
                             }
@@ -583,7 +583,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                                     { $eq: ['$jobId', '$$jobId'] },
                                                     { $eq: ['$companyId', '$$companyId'] },
                                                     { $eq: ['$billable', true] },
-                                                    { $eq: ['status', 'notInvoiced'] }
+                                                    { $eq: ['$status', 'notInvoiced'] }
                                                 ]
                                             }
                                         }
