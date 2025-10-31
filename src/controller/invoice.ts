@@ -24,7 +24,7 @@ const createInvoice = async (req: Request, res: Response, next: NextFunction): P
             exp.clientId = ObjectId(clientId);
             exp.status = 'yes';
             exp.type = 'client'
-            exp.Date = date || new Date();
+            exp.date = date || new Date();
             const expense = await ExpensesModel.create(exp);
             expenseIds.push(expense._id);
         }
@@ -311,10 +311,300 @@ const invoiceStatusChange = async (req: Request, res: Response, next: NextFuncti
     }
 };
 
+const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const {
+            startDate,
+            endDate,
+            clientId,
+            page = '1',
+            limit = '10',
+        }: any = req.query;
+
+        const companyId = req.user.companyId;
+        const currentDate = new Date();
+        
+        const pageNumber = parseInt(page, 10);
+        const pageSize = parseInt(limit, 10);
+        const skipCount = (pageNumber - 1) * pageSize;
+
+        // Build match conditions - only invoices with outstanding balance
+        const matchConditions: any = {
+            companyId: ObjectId(companyId),
+            $expr: { $gt: [{ $subtract: ['$totalAmount', '$paidAmount'] }, 0] }, // Only unpaid/partially paid
+        };
+
+        if (clientId) {
+            matchConditions.clientId = ObjectId(clientId);
+        }
+
+        if (startDate || endDate) {
+            matchConditions.date = {};
+            if (startDate) {
+                matchConditions.date.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                matchConditions.date.$lte = new Date(endDate);
+            }
+        }
+
+        // Aggregation pipeline for aged debtors with pagination
+        const pipeline = [
+            { $match: matchConditions },
+            {
+                $addFields: {
+                    // Calculate outstanding balance
+                    balance: { $subtract: ['$totalAmount', '$paidAmount'] },
+                    // Calculate days since invoice date
+                    daysOld: {
+                        $floor: {
+                            $divide: [
+                                { $subtract: [currentDate, '$date'] },
+                                1000 * 60 * 60 * 24,
+                            ],
+                        },
+                    },
+                },
+            },
+            {
+                $group: {
+                    _id: '$clientId',
+                    clientRef: { $first: '$clientId' },
+                    totalBalance: { $sum: '$balance' },
+                    
+                    // Aging buckets based on invoice date
+                    days30: {
+                        $sum: {
+                            $cond: [{ $lte: ['$daysOld', 30] }, '$balance', 0],
+                        },
+                    },
+                    days60: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $gt: ['$daysOld', 30] },
+                                        { $lte: ['$daysOld', 60] },
+                                    ],
+                                },
+                                '$balance',
+                                0,
+                            ],
+                        },
+                    },
+                    days90: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $gt: ['$daysOld', 60] },
+                                        { $lte: ['$daysOld', 90] },
+                                    ],
+                                },
+                                '$balance',
+                                0,
+                            ],
+                        },
+                    },
+                    days120: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $gt: ['$daysOld', 90] },
+                                        { $lte: ['$daysOld', 120] },
+                                    ],
+                                },
+                                '$balance',
+                                0,
+                            ],
+                        },
+                    },
+                    days150: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $gt: ['$daysOld', 120] },
+                                        { $lte: ['$daysOld', 150] },
+                                    ],
+                                },
+                                '$balance',
+                                0,
+                            ],
+                        },
+                    },
+                    days180: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $gt: ['$daysOld', 150] },
+                                        { $lte: ['$daysOld', 180] },
+                                    ],
+                                },
+                                '$balance',
+                                0,
+                            ],
+                        },
+                    },
+                    days180Plus: {
+                        $sum: {
+                            $cond: [{ $gt: ['$daysOld', 180] }, '$balance', 0],
+                        },
+                    },
+                },
+            },
+            {
+                $lookup: {
+                    from: 'clients',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'clientInfo',
+                },
+            },
+            {
+                $unwind: {
+                    path: '$clientInfo',
+                    preserveNullAndEmptyArrays: true,
+                },
+            },
+            {
+                $project: {
+                    _id: 0,
+                    clientId: '$_id',
+                    clientRef: '$clientInfo.clientRef',
+                    clientName: '$clientInfo.name',
+                    balance: { $round: ['$totalBalance', 2] },
+                    days30: { $round: ['$days30', 2] },
+                    days60: { $round: ['$days60', 2] },
+                    days90: { $round: ['$days90', 2] },
+                    days120: { $round: ['$days120', 2] },
+                    days150: { $round: ['$days150', 2] },
+                    days180: { $round: ['$days180', 2] },
+                    days180Plus: { $round: ['$days180Plus', 2] },
+                },
+            },
+            {
+                $sort: { clientRef: 1 },
+            },
+        ];
+
+        // Execute paginated query
+        const paginatedPipeline:any = [
+            ...pipeline,
+            { $skip: skipCount },
+            { $limit: pageSize },
+        ];
+
+        const agedDebtorsData = await InvoiceModel.aggregate(paginatedPipeline);
+
+        // Get total count for pagination
+        const countPipeline = [
+            { $match: matchConditions },
+            {
+                $group: {
+                    _id: '$clientId',
+                },
+            },
+            {
+                $count: 'totalClients',
+            },
+        ];
+        const countResult = await InvoiceModel.aggregate(countPipeline);
+        const totalClients = countResult.length > 0 ? countResult[0].totalClients : 0;
+
+        // Calculate totals from all data (not just current page)
+        const totalsPipeline:any = [
+            ...pipeline,
+            {
+                $group: {
+                    _id: null,
+                    totalBalance: { $sum: '$balance' },
+                    total30Days: { $sum: '$days30' },
+                    total60Days: { $sum: '$days60' },
+                    total90Days: { $sum: '$days90' },
+                    total120Days: { $sum: '$days120' },
+                    total150Days: { $sum: '$days150' },
+                    total180Days: { $sum: '$days180' },
+                    total180Plus: { $sum: '$days180Plus' },
+                },
+            },
+        ];
+
+        const totalsResult = await InvoiceModel.aggregate(totalsPipeline);
+        const totals = totalsResult[0] || {
+            totalBalance: 0,
+            total30Days: 0,
+            total60Days: 0,
+            total90Days: 0,
+            total120Days: 0,
+            total150Days: 0,
+            total180Days: 0,
+            total180Plus: 0,
+        };
+
+        // Calculate summary cards (same as totals for aged debtors)
+        const summary = {
+            days30: parseFloat(totals.total30Days.toFixed(2)),
+            days60: parseFloat(totals.total60Days.toFixed(2)),
+            days90Plus: parseFloat(
+                (
+                    totals.total90Days +
+                    totals.total120Days +
+                    totals.total150Days +
+                    totals.total180Days +
+                    totals.total180Plus
+                ).toFixed(2)
+            ),
+            days150Plus: parseFloat(
+                (totals.total150Days + totals.total180Days + totals.total180Plus).toFixed(2)
+            ),
+        };
+
+        const response = {
+            summary,
+            clients: agedDebtorsData,
+            totals: {
+                balance: parseFloat(totals.totalBalance.toFixed(2)),
+                days30: parseFloat(totals.total30Days.toFixed(2)),
+                days60: parseFloat(totals.total60Days.toFixed(2)),
+                days90: parseFloat(totals.total90Days.toFixed(2)),
+                days120: parseFloat(totals.total120Days.toFixed(2)),
+                days150: parseFloat(totals.total150Days.toFixed(2)),
+                days180: parseFloat(totals.total180Days.toFixed(2)),
+                days180Plus: parseFloat(totals.total180Plus.toFixed(2)),
+            },
+            pagination: {
+                currentPage: pageNumber,
+                pageSize,
+                totalClients,
+                totalPages: Math.ceil(totalClients / pageSize),
+                hasNextPage: pageNumber < Math.ceil(totalClients / pageSize),
+                hasPreviousPage: pageNumber > 1,
+            },
+        };
+
+        return res.status(200).json({
+            success: true,
+            message: 'Aged debtors report fetched successfully',
+            data: response,
+        });
+    } catch (error: any) {
+        console.error('Error fetching aged debtors:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to fetch aged debtors report',
+            error: error.message,
+        });
+    }
+};
+
 export default {
     createInvoice,
     getInvoices,
     createInvoiceLog,
     invoiceStatusChange,
     getInvoiceById,
+    getAgedDebtors
 };
