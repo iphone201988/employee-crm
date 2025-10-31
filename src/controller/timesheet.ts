@@ -71,34 +71,8 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                 const rate = timeEntry?.rate || 0;
                 for (const log of logs) {
                     totalHours += log.duration;
-                    const addedLog = {
-                        userId: timesheet?.userId || userId,
-                        timeEntrieId: data._id,
-                        companyId: companyId,
-                        clientId: timeEntry.clientId,
-                        jobId: timeEntry.jobId,
-                        jobTypeId: job?.jobTypeId,
-                        timeCategoryId: timeEntry.timeCategoryId,
-                        date: log.date,
-                        description: timeEntry.description,
-                        billable: timeEntry.isbillable,
-                        duration: log.duration,
-                        rate: timeEntry.rate,
-                        amount: calculateEarnings(log.duration, timeEntry.rate),
-                    }
-                    await TimeLogModel.findOneAndUpdate({
-                        userId: timesheet?.userId || userId,
-                        timeEntrieId: data._id,
-                        clientId: timeEntry.clientId,
-                        jobId: timeEntry.jobId,
-                        timeCategoryId: timeEntry.timeCategoryId,
-                        billable: timeEntry.isbillable,
-                        date: log.date
-                    }, addedLog, {
-                        upsert: true,
-                        new: true
-                    });
                 }
+
                 totalAmount = calculateEarnings(totalHours, rate);
                 if (data) {
                     data.totalHours = totalHours;
@@ -437,7 +411,7 @@ const getTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
             JobCategoryModel.find({ companyId: user?.companyId }, { _id: 1, name: 1 }).lean()
         ]);
         const clientIds = jobs.map((job: any) => job.clientId);
-        const clients = await ClientModel.find({ _id: { $in: clientIds } , status: "active"}, { _id: 1, name: 1, clientRef: 1 }).lean();
+        const clients = await ClientModel.find({ _id: { $in: clientIds }, status: "active" }, { _id: 1, name: 1, clientRef: 1 }).lean();
 
         SUCCESS(res, 200, "Timesheet fetched successfully",
             {
@@ -804,8 +778,45 @@ const deleteTimeLog = async (req: Request, res: Response, next: NextFunction): P
         next(error);
     }
 };
-async function logSaved (timesheet:any) {
-    
+async function logSaved(timesheet: any) {
+    const timeEntries = timesheet.timeEntries;
+    for (const entryId of timeEntries) {
+        const timeEntry = await TimeEntryModel.findById(entryId);
+        if (timeEntry) {
+            const logs = timeEntry.logs || [];
+            for (const log of logs) {
+                const job = await JobModel.findById(timeEntry.jobId);
+                const addedLog = {
+                    userId: timeEntry?.userId,
+                    timeEntrieId: timeEntry._id,
+                    companyId: timeEntry?.companyId,
+                    clientId: timeEntry.clientId,
+                    jobId: timeEntry.jobId,
+                    jobTypeId: job?.jobTypeId,
+                    timeCategoryId: timeEntry.timeCategoryId,
+                    date: log.date,
+                    description: timeEntry.description,
+                    billable: timeEntry.isbillable,
+                    duration: log.duration,
+                    rate: timeEntry.rate,
+                    amount: calculateEarnings(log?.duration, timeEntry.rate),
+                }
+                await TimeLogModel.findOneAndUpdate({
+                    userId: timesheet?.userId,
+                    timeEntrieId: timeEntry._id,
+                    clientId: timeEntry.clientId,
+                    jobId: timeEntry.jobId,
+                    timeCategoryId: timeEntry.timeCategoryId,
+                    billable: timeEntry.isbillable,
+                    date: log.date
+                }, addedLog, {
+                    upsert: true,
+                    new: true
+                });
+            }
+        }
+    }
+
 }
 const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -832,6 +843,7 @@ const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunc
             update.status = "approved";
             update.approvedBy = req.userId
             update.approvedAt = new Date().toISOString().slice(0, 10);
+            await logSaved(timeSheet);
         } else if (status == "rejected") {
             update.status = "rejected";
             update.rejectedAt = new Date().toISOString().slice(0, 10);

@@ -78,7 +78,7 @@ export const deleteImageFile = (imagePath: string): void => {
 };
 export const ObjectId =(id:any) => new mongoose.Types.ObjectId(id);
 
-export function calculateEarnings(seconds:number, hourlyRate:number) {
+export function calculateEarnings(seconds:any, hourlyRate:any) {
     const hours = seconds / 3600;  // Convert seconds to hours
     const earnings = hours * hourlyRate || 0;  // Calculate earnings
     console.log('Earnings:', earnings);

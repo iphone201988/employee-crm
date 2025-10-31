@@ -1095,7 +1095,7 @@ const wipBalance = async (req: Request, res: Response) => {
             {
                 $lookup: {
                     from: 'clients',
-                    localField: '_id',
+                    localField: 'clientId',
                     foreignField: '_id',
                     as: 'clientInfo',
                 },
