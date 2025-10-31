@@ -16,6 +16,7 @@ import { WipTragetAmountsModel } from '../models/WIPTargetAmounts';
 import { BadRequestError, NotFoundError } from '../utils/errors';
 import { SettingModel } from '../models/Setting';
 
+
 // Main function to get WIP data
 export async function getWIPDashboardData(companyId: string) {
     const wipData = await ClientModel.aggregate([
@@ -543,7 +544,8 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                             }
                         }
                     ]
-            }},{
+                }
+            }, {
                 $unwind: {
                     path: '$company',
                     preserveNullAndEmptyArrays: true,
@@ -580,7 +582,8 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                                 $and: [
                                                     { $eq: ['$jobId', '$$jobId'] },
                                                     { $eq: ['$companyId', '$$companyId'] },
-                                                    { $eq: ['$billable', true] }
+                                                    { $eq: ['$billable', true] },
+                                                    { $eq: ['status', 'notInvoiced'] }
                                                 ]
                                             }
                                         }
@@ -609,7 +612,12 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                 from: 'wipopenbalances',
                                 localField: '_id',
                                 foreignField: 'jobId',
-                                as: 'wipopenbalances'
+                                as: 'wipopenbalances',
+                                pipeline: [
+                                    {
+                                        $match: { status: "notInvoiced" }
+                                    }
+                                ]
                             }
                         },
                         {
@@ -667,6 +675,12 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                 foreignField: 'jobId',
                                 as: 'wipBreakdown',
                                 pipeline: [
+
+                                    {
+                                        $match: {
+                                            status: 'notInvoiced',
+                                        }
+                                    },
                                     {
                                         $lookup: {
                                             from: 'users',
@@ -759,7 +773,8 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                 {
                                     $and: [
                                         { $eq: ['$clientId', '$$clientId'] },
-                                        { $eq: ['$companyId', '$$companyId'] }
+                                        { $eq: ['$companyId', '$$companyId'] },
+                                        { $eq: ['$status', 'no'] },
                                     ]
                                 }
                             }
@@ -773,7 +788,14 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                 $lookup:
                 {
                     from: 'wipopenbalances', localField: '_id', foreignField: 'clientId',
-                    as: 'clientWipOpenBalance'
+                    as: 'clientWipOpenBalance',pipeline: [
+                        {
+                            $match:
+                            {
+                                status: 'notInvoiced'
+                            }
+                        }
+                    ]
                 }
             }, {
                 $addFields:
@@ -811,7 +833,10 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                             $match: {
                                 $expr: {
                                     $and: [{ $eq: ['$clientId', '$$clientId'] },
-                                    { $eq: ['$companyId', '$$companyId'] }]
+                                    { $eq: ['$companyId', '$$companyId'] },
+                                    { $eq: ['$status', 'notInvoiced'] }
+                                ]
+
                                 }
                             }
                         },
@@ -934,7 +959,8 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                                 $and: [
                                                     { $eq: ['$jobId', '$$jobId'] },
                                                     { $eq: ['$companyId', '$$companyId'] },
-                                                    { $eq: ['$billable', true] }
+                                                    { $eq: ['$billable', true] },
+                                                    { $eq: ['$status', 'notInvoiced'] }
                                                 ]
                                             }
                                         }
