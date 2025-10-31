@@ -788,7 +788,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                 $lookup:
                 {
                     from: 'wipopenbalances', localField: '_id', foreignField: 'clientId',
-                    as: 'clientWipOpenBalance',pipeline: [
+                    as: 'clientWipOpenBalance', pipeline: [
                         {
                             $match:
                             {
@@ -835,7 +835,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                     $and: [{ $eq: ['$clientId', '$$clientId'] },
                                     { $eq: ['$companyId', '$$companyId'] },
                                     { $eq: ['$status', 'notInvoiced'] }
-                                ]
+                                    ]
 
                                 }
                             }
@@ -1113,6 +1113,8 @@ const wipBalance = async (req: Request, res: Response) => {
             {
                 $group: {
                     _id: '$clientId',
+                    clientRef: { $first: '$clientInfo.clientRef' },
+                    clientName: { $first: '$clientInfo.name' },
                     wipBalance: { $sum: '$amount' },
                     days30: {
                         $sum: { $cond: [{ $lte: ['$daysOld', 30] }, '$amount', 0] },
@@ -1172,8 +1174,8 @@ const wipBalance = async (req: Request, res: Response) => {
                 $project: {
                     _id: 0,
                     clientId: '$_id',
-                    clientRef: '$clientInfo.clientRef',
-                    clientName: '$clientInfo.name',
+                    clientRef: 1,
+                    clientName: 1,
                     wipBalance: { $round: ['$wipBalance', 2] },
                     days30: { $round: ['$days30', 2] },
                     days60: { $round: ['$days60', 2] },
