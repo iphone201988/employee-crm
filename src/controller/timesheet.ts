@@ -804,11 +804,18 @@ const deleteTimeLog = async (req: Request, res: Response, next: NextFunction): P
         next(error);
     }
 };
+async function logSaved (timesheet:any) {
+    
+}
 const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const { timeSheetId, status } = req.body;
         const update: any = {};
         console.log("status", status, timeSheetId);
+        const timeSheet = await TimesheetModel.findById(timeSheetId);
+        if (!timeSheet) {
+            throw new Error("Time sheet not found");
+        }
         if (status == "reviewed") {
             update.status = "reviewed";
             update.reviewedAt = new Date().toISOString().slice(0, 10);
@@ -819,6 +826,7 @@ const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunc
             if (setting && setting?.autoApproveTimesheets) {
                 update.status = "autoApproved";
                 update.autoApprovedAt = new Date().toISOString().slice(0, 10);
+                await logSaved(timeSheet);
             }
         } else if (status == "approved") {
             update.status = "approved";

@@ -19,4 +19,6 @@ wipRouter.post("/invoice", authenticate, validate(wipValidation.createInvoiceVal
 wipRouter.get("/invoices", authenticate, invoiceController.getInvoices);
 wipRouter.post("/invoice/log", authenticate, validate(wipValidation.createInvoiceLogValidation), invoiceController.createInvoiceLog);
 wipRouter.patch("/invoice/status-change", authenticate, validate(wipValidation.updateInvoiceStatusValidation), invoiceController.invoiceStatusChange);
+
+wipRouter.get("/aged-debtors", authenticate, invoiceController.getAgedDebtors);
 export default wipRouter;

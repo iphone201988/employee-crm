@@ -14,6 +14,7 @@ const createInvoice = async (req: Request, res: Response, next: NextFunction): P
         req.body.invoiceCreatedBy = req.userId;
         let invoiceNo = `INV-${generateOtp(6)}`;
         req.body.invoiceNo = invoiceNo;
+        req.body.status = 'issued';
         const newInvoice = await InvoiceModel.create(req.body);
         await TimeLogModel.updateMany({ _id: { $in: timeLogIds } }, { status: 'invoice' });
         await ExpensesModel.updateMany({ _id: { $in: expenseIds } }, { status: 'yes' });
@@ -131,6 +132,20 @@ const getInvoices = async (req: Request, res: Response, next: NextFunction): Pro
                             }
                         },
                         { $unwind: { path: '$timeCategory', preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: 'jobcategories',
+                                localField: 'jobTypeId',
+                                foreignField: '_id',
+                                as: 'jobCategory',
+                            }
+                        },{
+                            $unwind: {
+                                path: '$jobCategory',
+                                preserveNullAndEmptyArrays: true,
+                            },
+                        }
+
                     ]
                 }
             },
@@ -578,10 +593,7 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
             pagination: {
                 currentPage: pageNumber,
                 pageSize,
-                totalClients,
-                totalPages: Math.ceil(totalClients / pageSize),
-                hasNextPage: pageNumber < Math.ceil(totalClients / pageSize),
-                hasPreviousPage: pageNumber > 1,
+                totals:totalClients,
             },
         };
 
