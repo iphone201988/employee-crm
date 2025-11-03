@@ -11,6 +11,7 @@ import { JobCategoryModel } from "../models/JobCategory";
 import { TimeLogModel } from "../models/TImeLog";
 import { SettingModel } from "../models/Setting";
 import { NotesModel } from "../models/Notes";
+import { TimeCategoryModel } from "../models/TimeCategory";
 
 const addTimesheet = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -403,12 +404,13 @@ const getTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
     try {
         const timesheet: any = await TimesheetModel.findOne(query).populate('timeEntries').lean() || null;
         console.log("user._id", user?._id);
-        const [jobs, jobCategories] = await Promise.all([
+        const [jobs, jobCategories, timeCategories] = await Promise.all([
             JobModel.find(
                 { companyId: user?.companyId, teamMembers: user?._id },
                 { _id: 1, clientId: 1, name: 1 }
             ).lean(),
-            JobCategoryModel.find({ companyId: user?.companyId }, { _id: 1, name: 1 }).lean()
+            JobCategoryModel.find({ companyId: user?.companyId }, { _id: 1, name: 1 }).lean(),
+            TimeCategoryModel.find({ companyId: user?.companyId }, { _id: 1, name: 1 }).lean()
         ]);
         const clientIds = jobs.map((job: any) => job.clientId);
         const clients = await ClientModel.find({ _id: { $in: clientIds }, status: "active" }, { _id: 1, name: 1, clientRef: 1 }).lean();
@@ -416,7 +418,7 @@ const getTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
         SUCCESS(res, 200, "Timesheet fetched successfully",
             {
                 data: timesheet,
-                dropdoenOptionals: { clients, jobs, jobCategories },
+                dropdoenOptionals: { clients, jobs, jobCategories, timeCategories },
                 rate: user?.billableRate,
                 name: user?.name,
                 avatarUrl: user?.avatarUrl
