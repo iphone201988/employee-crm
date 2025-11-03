@@ -619,6 +619,25 @@ const getClientBreakdown = async (req: Request, res: Response, next: NextFunctio
                                             }
                                         }
                                     },
+                                    {
+                                        $lookup: {
+                                            from: 'users',
+                                            localField: 'userId',
+                                            foreignField: '_id',
+                                            as: 'user',
+                                            pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1 } }]
+                                        }
+                                    },
+                                    {$unwind: { path: '$user' , preserveNullAndEmptyArrays: true } },
+                                    {$lookup: {
+                                        from: 'timecategories',
+                                        localField: 'timeCategoryId',
+                                        foreignField: '_id',
+                                        as: 'timeCategory',
+                                        pipeline: [{ $project: { _id: 1, name: 1 } }]
+                                    }},
+                                    {$unwind: { path: '$timeCategory' , preserveNullAndEmptyArrays: true } },
+                                  
                                 ],
                                 as: 'timeLogs'
                             }
