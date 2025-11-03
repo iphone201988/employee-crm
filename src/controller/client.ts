@@ -143,120 +143,173 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
                     foreignField: '_id',
                     as: 'businessTypeId'
                 }
-            }
-        ]);
-        const timeLogs = await TimeLogModel.aggregate([
-            {
-                $match: { clientId: ObjectId(clientId) }
             },
             {
                 $lookup: {
-                    from: "users",
-                    localField: "userId",
-                    foreignField: "_id",
-                    as: "user",
-                    pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1 } }]
-                }
-            },
-            { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: "timelogcategories",
-                    localField: "timeLogCategoryId",
-                    foreignField: "_id",
-                    as: "timeLogCategory",
-                    pipeline: [{ $project: { _id: 1, name: 1 } }]
-                }
-            }, {
-                $unwind: { path: "$timeLogCategory", preserveNullAndEmptyArrays: true }
-            },
-            {
-                $lookup: {
-                    from: "clients",
-                    localField: "clientId",
-                    foreignField: "_id",
-                    as: "client",
-                    pipeline: [{ $project: { _id: 1, name: 1, clientRef: 1 } }]
-                }
-            },
-            { $unwind: { path: "$client", preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: "jobs",
-                    localField: "jobId",
-                    foreignField: "_id",
-                    as: "job",
-                    pipeline: [{ $project: { _id: 1, name: 1 } }]
-                }
-            },
-            { $unwind: { path: "$job", preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: "jobcategories",
-                    localField: "jobCategoryId",
-                    foreignField: "_id",
-                    as: "jobCategory",
-                    pipeline: [{ $project: { _id: 1, name: 1 } }]
-                }
-            },
-            { $unwind: { path: "$jobCategory", preserveNullAndEmptyArrays: true } },
-        ]);
+                    from: 'timelogs',
+                    localField: '_id',
+                    foreignField: 'clientId',
+                    as: 'timeLogs',
+                    pipeline: [
+                        {
+                            $lookup: {
+                                from: "users",
+                                localField: "userId",
+                                foreignField: "_id",
+                                as: "user",
+                                pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1 } }]
+                            }
+                        },
+                        { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: "timecategories",
+                                localField: "timeCategoryId",
+                                foreignField: "_id",
+                                as: "timeLogCategory",
+                                pipeline: [{ $project: { _id: 1, name: 1 } }]
+                            }
+                        }, {
+                            $unwind: { path: "$timeLogCategory", preserveNullAndEmptyArrays: true }
+                        },
+                        {
+                            $lookup: {
+                                from: "clients",
+                                localField: "clientId",
+                                foreignField: "_id",
+                                as: "client",
+                                pipeline: [{ $project: { _id: 1, name: 1, clientRef: 1 } }]
+                            }
+                        },
+                        { $unwind: { path: "$client", preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: "jobs",
+                                localField: "jobId",
+                                foreignField: "_id",
+                                as: "job",
+                                pipeline: [{ $project: { _id: 1, name: 1 } }]
+                            }
+                        },
+                        { $unwind: { path: "$job", preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: "jobcategories",
+                                localField: "jobTypeId",
+                                foreignField: "_id",
+                                as: "jobCategory",
+                                pipeline: [{ $project: { _id: 1, name: 1 } }]
+                            }
+                        },
+                        { $unwind: { path: "$jobCategory", preserveNullAndEmptyArrays: true } },
+                        {
+                            $project: {
+                                _id: 1,
+                                date: 1,
+                                // clientId: 1,
+                                // timeCategoryId: 1,
+                                // jobId: 1,
+                                // userId: 1,
+                                // jobTypeId: 1,
+                                client: 1,
+                                timeLogCategory: 1,
+                                user: 1,
+                                job: 1,
+                                jobCategory: 1,
+                                status: 1,
+                                duration: 1,
+                                amount: 1,
+                                rate: 1,
+                                description: 1,
+                                billable: 1
 
-        const jobs = await JobModel.aggregate([
-            {
-                $match: { clientId: ObjectId(clientId) }
+                            }
+                        }
+                    ]
+                }
             },
             {
                 $lookup: {
-                    from: "timelogs",
-                    localField: "_id",
-                    foreignField: "jobId",
-                    as: "timeLogs",
-                    pipeline: [{
-                        $lookup: {
-                            from: "timecategories",
-                            localField: "timeLogCategoryId",
-                            foreignField: "_id",
-                            as: "timeLogCategory",
-                            pipeline: [{ $project: { _id: 1, name: 1 } }]
+                    from: 'jobs',
+                    localField: '_id',
+                    foreignField: 'clientId',
+                    as: 'jobs',
+                    pipeline: [
+                        {
+                            $lookup: {
+                                from: "timelogs",
+                                localField: "_id",
+                                foreignField: "jobId",
+                                as: "timeLogs",
+                                pipeline: [{
+                                    $lookup: {
+                                        from: "timecategories",
+                                        localField: "timeCategoryId",
+                                        foreignField: "_id",
+                                        as: "timeLogCategory",
+                                        pipeline: [{ $project: { _id: 1, name: 1 } }]
+                                    }
+                                }, {
+                                    $unwind: {
+                                        path: "$timeLogCategory", preserveNullAndEmptyArrays: true
+                                    },
+                                },
+                                {
+                                    $lookup: {
+                                        from: "users",
+                                        localField: "userId",
+                                        foreignField: "_id",
+                                        as: "user",
+                                        pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1 } }]
+                                    }
+                                },
+                                { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+                                {
+                                    $project: {
+                                        userId: 1,
+                                        timeLogCategoryId: 1,
+                                        duration: 1,
+                                        amount: 1,
+                                        rate: 1,
+                                        status: 1
+                                    }
+                                }
+                                ]
+                            }
+                        },
+                        {
+                            $addFields: {
+                                totalTimeLogHours: { $sum: "$timeLogs.duration" },
+                                amount: { $sum: "$timeLogs.amount" }
+                            }
                         }
-                    }, {
-                        $unwind: {
-                            path: "$timeLogCategory", preserveNullAndEmptyArrays: true
-                        }
-                    }]
+                    ]
                 }
             },
-            {
-                $addFields: {
-                    totalTimeLogHours: { $sum: "$timeLogs.duration" },
-                    amount: { $sum: "$timeLogs.amount" }
-                }
-            }
-        ]);
-        const expenses = await ExpensesModel.aggregate([
-            { $match: { clientId: ObjectId(clientId) } }
-        ]);
-         const wip = await JobModel.aggregate([
-            { $match: { clientId: ObjectId(clientId)} },
             {
                 $lookup:{
-                    from: "timelogs",
-                    localField: "_id",
-                    foreignField: "jobId",
-                    as: "timeLogs",
-                }
-            },
-            {
-                $addFields: {
-                    totalTimeLogHours: { $sum: "$timeLogs.duration" },
-                    amount: { $sum: "$timeLogs.amount" }
+                    from: 'expenses',
+                    localField: '_id',
+                    foreignField: 'clientId',
+                    as: 'expenses',
+                    pipeline: [
+                        {
+                            $project: {
+                                _id: 1,
+                                totalAmount: 1,
+                                date: 1,
+                                description: 1,
+                                expreseCategory: 1,
+                                status: 1
+                            }
+                        }
+                    ]
                 }
             }
-            
-         ]);
 
-        SUCCESS(res, 200, "Client fetched successfully", { data: client, timeLogs, jobs, expenses, wip });
+        ]);
+
+        SUCCESS(res, 200, "Client fetched successfully", { data: client, });
     } catch (error) {
         console.log("error in getClientById", error);
         next(error);
@@ -506,4 +559,432 @@ const updateClientService = async (req: Request, res: Response, next: NextFuncti
     }
 };
 
-export default { addClient, updateClient, getClients, getClientServices, updateClientService, getClientById, deleteClient };
+
+const getClientBreakdown = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const companyId = req.user.companyId;
+
+        // Pagination params
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const skip = (page - 1) * limit;
+        const search = req.query.search as string || '';
+
+        // Base client match condition
+        const baseMatch: any = {
+            companyId: ObjectId(companyId),
+            status: 'active'
+        };
+
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            baseMatch.$or = [
+                { name: { $regex: searchRegex } },
+                { clientRef: { $regex: searchRegex } }
+            ];
+        }
+
+        // Main aggregation pipeline
+        const pipeline: any[] = [
+            { $match: baseMatch },
+
+            // Lookup jobs for this client
+            {
+                $lookup: {
+                    from: 'jobs',
+                    let: { clientId: '$_id', companyId: '$companyId' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$clientId', '$$clientId'] },
+                                        { $eq: ['$companyId', '$$companyId'] }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: 'timelogs',
+                                let: { jobId: '$_id' },
+                                pipeline: [
+                                    {
+                                        $match: {
+                                            $expr: {
+                                                $and: [
+                                                    { $eq: ['$jobId', '$$jobId'] },
+                                                    { $eq: ['$billable', true] }
+                                                ]
+                                            }
+                                        }
+                                    },
+                                ],
+                                as: 'timeLogs'
+                            }
+                        },
+                        {
+                            $addFields: {
+                                totalLogDuration: { $sum: '$timeLogs.duration' }
+                            }
+                        },
+                        {
+                            $project: {
+                                _id: 1,
+                                name: 1,
+                                status: 1,
+                                timeLogs: 1,
+                                totalLogDuration: 1
+                            }
+                        }
+                    ],
+                    as: 'allJobs'
+                }
+            },
+
+            // Lookup WIP (unbilled time logs)
+            {
+                $lookup: {
+                    from: 'timelogs',
+                    let: { clientId: '$_id', companyId: '$companyId' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$clientId', '$$clientId'] },
+                                        { $eq: ['$companyId', '$$companyId'] },
+                                        { $eq: ['$billable', true] },
+                                        { $eq: ['$status', 'notInvoiced'] }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            $group: {
+                                _id: null,
+                                totalWipAmount: { $sum: '$amount' },
+                                totalWipDuration: { $sum: '$duration' }
+                            }
+                        }
+                    ],
+                    as: 'wipData'
+                }
+            },
+            {
+                $addFields: {
+                    wipAmount: {
+                        $ifNull: [{ $arrayElemAt: ['$wipData.totalWipAmount', 0] }, 0]
+                    },
+                    wipDuration: {
+                        $ifNull: [{ $arrayElemAt: ['$wipData.totalWipDuration', 0] }, 0]
+                    }
+                }
+            },
+
+            // Lookup invoices for this client
+            {
+                $lookup: {
+                    from: 'invoices',
+                    let: { clientId: '$_id', companyId: '$companyId' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$clientId', '$$clientId'] },
+                                        { $eq: ['$companyId', '$$companyId'] }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            $addFields: {
+                                balance: { $subtract: ['$totalAmount', '$paidAmount'] }
+                            }
+                        },
+                        {
+                            $group: {
+                                _id: null,
+                                totalInvoices: { $sum: 1 },
+                                totalInvoiceAmount: { $sum: '$totalAmount' },
+                                totalOutstanding: { $sum: '$balance' },
+                                totalPaid: { $sum: '$paidAmount' },
+                            }
+                        }
+                    ],
+                    as: 'invoiceData'
+                }
+            },
+            {
+                $addFields: {
+                    totalInvoices: {
+                        $ifNull: [{ $arrayElemAt: ['$invoiceData.totalInvoices', 0] }, 0]
+                    },
+                    totalOutstanding: {
+                        $ifNull: [{ $arrayElemAt: ['$invoiceData.totalOutstanding', 0] }, 0]
+                    },
+                    totalPaid: {
+                        $ifNull: [{ $arrayElemAt: ['$invoiceData.totalPaid', 0] }, 0]
+                    },
+                    totalInvoiceAmount: {
+                        $ifNull: [{ $arrayElemAt: ['$invoiceData.totalInvoiceAmount', 0] }, 0]
+                    }
+                }
+            },
+
+            // Lookup expenses for this client
+            {
+                $lookup: {
+                    from: 'expenses',
+                    let: { clientId: '$_id', companyId: '$companyId' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$clientId', '$$clientId'] },
+                                        { $eq: ['$companyId', '$$companyId'] }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            $group: {
+                                _id: null,
+                                totalExpenses: { $sum: '$totalAmount' }
+                            }
+                        }
+                    ],
+                    as: 'expenseData'
+                }
+            },
+            {
+                $addFields: {
+                    totalExpenses: {
+                        $ifNull: [{ $arrayElemAt: ['$expenseData.totalExpenses', 0] }, 0]
+                    }
+                }
+            },
+            // jobCategory
+            {
+                $lookup: {
+                    from: 'jobcategories',
+                    localField: 'jobCategories',
+                    foreignField: '_id',
+                    as: 'jobCategory'
+                }
+            },
+
+            // Calculate derived fields
+            {
+                $addFields: {
+                    // WIP + Outstanding 
+                    wipPlusOutstanding: { $add: ['$wipAmount', '$totalOutstanding'] },
+                    // Average Balance
+                    averageBalance: {
+                        $cond: [
+                            { $gt: ['$totalInvoices', 0] },
+                            { $divide: ['$totalOutstanding', '$totalInvoices'] },
+                            0
+                        ]
+                    },
+
+                    totalLogDuration: { $sum: '$allJobs.totalLogDuration' }
+                }
+            },
+
+
+            // Project final fields
+            {
+                $project: {
+                    _id: 1,
+                    clientRef: 1,
+                    name: 1,
+                    email: 1,
+                    phone: 1,
+                    status: 1,
+                    allJobs: 1,
+                    totalLogDuration: 1,
+                    jobCategory: 1,
+                    totalOutstanding: { $round: ['$totalOutstanding', 2] },
+                    wipAmount: { $round: ['$wipAmount', 2] },
+                    totalInvoices: 1,
+                    totalInvoiceAmount: { $round: ['$totalInvoiceAmount', 2] },
+                    totalPaid: { $round: ['$totalPaid', 2] },
+                    wipPlusOutstanding: { $round: ['$wipPlusOutstanding', 2] },
+                    averageBalance: { $round: ['$averageBalance', 2] },
+                    totalExpenses: { $round: ['$totalExpenses', 2] },
+                    createdAt: 1
+                }
+            },
+
+            // Sort by client name
+            { $sort: { name: 1 } },
+
+            // Facet for pagination and total count
+            {
+                $facet: {
+                    data: [
+                        { $skip: skip },
+                        { $limit: limit }
+                    ],
+                    totalCount: [{ $count: 'count' }]
+                }
+            }
+        ];
+
+        // Execute aggregation
+        const result = await ClientModel.aggregate(pipeline).collation({ locale: "en", strength: 2 });
+        const clientBreakdown = result[0].data;
+        const totalCount = result[0].totalCount[0]?.count || 0;
+
+        // Calculate summary totals
+        const summaryPipeline = [
+            { $match: baseMatch },
+            {
+                $lookup: {
+                    from: 'jobs',
+                    let: { clientId: '$_id', companyId: '$companyId' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$clientId', '$$clientId'] },
+                                        { $eq: ['$companyId', '$$companyId'] }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    as: 'jobs'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'timelogs',
+                    let: { clientId: '$_id', companyId: '$companyId' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$clientId', '$$clientId'] },
+                                        { $eq: ['$companyId', '$$companyId'] },
+                                        { $eq: ['$billable', true] },
+                                        { $eq: ['$status', 'notInvoiced'] }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    as: 'wipLogs'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'invoices',
+                    let: { clientId: '$_id', companyId: '$companyId' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$clientId', '$$clientId'] },
+                                        { $eq: ['$companyId', '$$companyId'] }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    as: 'invoices'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'expenses',
+                    let: { clientId: '$_id', companyId: '$companyId' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$clientId', '$$clientId'] },
+                                        { $eq: ['$companyId', '$$companyId'] }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    as: 'expenses'
+                }
+            },
+            {
+                $addFields: {
+                    wipAmount: { $sum: '$wipLogs.amount' },
+                    totalOutstanding: {
+                        $sum: {
+                            $map: {
+                                input: '$invoices',
+                                as: 'inv',
+                                in: { $subtract: ['$$inv.totalAmount', '$$inv.paidAmount'] }
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalClients: { $sum: 1 },
+                    totalJobs: { $sum: { $size: '$jobs' } },
+                    totalOutstanding: { $sum: '$totalOutstanding' },
+                    totalWipAmount: { $sum: '$wipAmount' },
+                    totalInvoices: { $sum: { $size: '$invoices' } },
+                    totalExpenses: { $sum: { $sum: '$expenses.totalAmount' } }
+                }
+            }
+        ];
+
+        const summaryResult = await ClientModel.aggregate(summaryPipeline);
+        const summary = summaryResult[0] || {
+            totalClients: 0,
+            totalJobs: 0,
+            totalOutstanding: 0,
+            totalWipAmount: 0,
+            totalInvoices: 0,
+            totalExpenses: 0
+        };
+
+
+
+        return res.status(200).json({
+            success: true,
+            message: "Client breakdown fetched successfully",
+            data: {
+                clients: clientBreakdown,
+
+                summary: {
+                    totalClients: summary.totalClients,
+                    totalJobs: summary.totalJobs,
+                    totalOutstanding: parseFloat(summary.totalOutstanding.toFixed(2)),
+                    totalWipAmount: parseFloat(summary.totalWipAmount.toFixed(2)),
+                    totalInvoices: summary.totalInvoices,
+                    totalExpenses: parseFloat(summary.totalExpenses.toFixed(2))
+                },
+                pagination: {
+                    page,
+                    limit,
+                    totalCount,
+                    totalPages: Math.ceil(totalCount / limit),
+                }
+            }
+        });
+    } catch (error) {
+        console.log("error in getClientBreakdown", error);
+        next(error);
+    }
+};
+
+export default { addClient, updateClient, getClients, getClientServices, updateClientService, getClientById, deleteClient, getClientBreakdown };
