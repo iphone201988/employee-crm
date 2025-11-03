@@ -266,8 +266,8 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
                                 { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
                                 {
                                     $project: {
-                                        userId: 1,
-                                        timeLogCategoryId: 1,
+                                        user: 1,
+                                        timeLogCategory: 1,
                                         duration: 1,
                                         amount: 1,
                                         rate: 1,
