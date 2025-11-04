@@ -7,6 +7,7 @@ import { TimeLogModel } from "../models/TImeLog";
 import { ExpensesModel } from "../models/Expenses";
 import { WipOpenBalanceModel } from "../models/wipOpenBalance";
 import { InvoiceLogModel } from "../models/InvoiceLog";
+import { WriteOffModel } from "../models/WriteOff";
 const createInvoice = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         let { date, clientId, timeLogIds, expenseIds, wipOpenBalanceIds, newExpenses } = req.body;
@@ -15,6 +16,7 @@ const createInvoice = async (req: Request, res: Response, next: NextFunction): P
         let invoiceNo = `INV-${generateOtp(6)}`;
         req.body.invoiceNo = invoiceNo;
         req.body.status = 'issued';
+        req.body.originalNetAmount = req.body.netAmount || 0;
         const newInvoice = await InvoiceModel.create(req.body);
         await TimeLogModel.updateMany({ _id: { $in: timeLogIds } }, { status: 'invoice' });
         await ExpensesModel.updateMany({ _id: { $in: expenseIds } }, { status: 'yes' });
@@ -139,7 +141,7 @@ const getInvoices = async (req: Request, res: Response, next: NextFunction): Pro
                                 foreignField: '_id',
                                 as: 'jobCategory',
                             }
-                        },{
+                        }, {
                             $unwind: {
                                 path: '$jobCategory',
                                 preserveNullAndEmptyArrays: true,
@@ -338,7 +340,7 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
 
         const companyId = req.user.companyId;
         const currentDate = new Date();
-        
+
         const pageNumber = parseInt(page, 10);
         const pageSize = parseInt(limit, 10);
         const skipCount = (pageNumber - 1) * pageSize;
@@ -386,7 +388,7 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
                     _id: '$clientId',
                     clientRef: { $first: '$clientId' },
                     totalBalance: { $sum: '$balance' },
-                    
+
                     // Aging buckets based on invoice date
                     days30: {
                         $sum: {
@@ -506,7 +508,7 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
         ];
 
         // Execute paginated query
-        const paginatedPipeline:any = [
+        const paginatedPipeline: any = [
             ...pipeline,
             { $skip: skipCount },
             { $limit: pageSize },
@@ -530,7 +532,7 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
         const totalClients = countResult.length > 0 ? countResult[0].totalClients : 0;
 
         // Calculate totals from all data (not just current page)
-        const totalsPipeline:any = [
+        const totalsPipeline: any = [
             ...pipeline,
             {
                 $group: {
@@ -593,7 +595,7 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
             pagination: {
                 currentPage: pageNumber,
                 pageSize,
-                totals:totalClients,
+                totals: totalClients,
             },
         };
 
@@ -611,6 +613,24 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
         });
     }
 };
+const getInvoiceByInvoiceNo = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { invoiceNo } = req.params;
+        const invoice:any = await InvoiceModel.findOne({ invoiceNo }).populate({
+            path: 'timeLogIds',
+
+        }).lean();
+        if (!invoice) {
+            throw new BadRequestError("Invoice not found");
+        }
+        invoice.totalLogAmount = invoice.timeLogIds.reduce((total: number, log: any) => total + log.amount, 0);
+        SUCCESS(res, 200, "Invoice fetched successfully", { data: invoice });
+    } catch (error) {
+        console.log("error in getInvoiceByInvoiceNumber", error);
+        next(error);
+    }
+};
+
 
 export default {
     createInvoice,
@@ -618,5 +638,6 @@ export default {
     createInvoiceLog,
     invoiceStatusChange,
     getInvoiceById,
-    getAgedDebtors
+    getAgedDebtors,
+    getInvoiceByInvoiceNo,
 };

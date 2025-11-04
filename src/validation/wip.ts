@@ -31,14 +31,40 @@ const createInvoiceLogValidation = {
         date: Joi.date().required(),
     }),
 };
- const updateInvoiceStatusValidation = {
-     body: Joi.object({
-         invoiceId: Joi.string().required(),
-         status: Joi.string().required(),
-     }),
- }
+const updateInvoiceStatusValidation = {
+    body: Joi.object({
+        invoiceId: Joi.string().required(),
+        status: Joi.string().required(),
+    }),
+};
+
+const createWriteOffValidation = {
+    body: Joi.object({
+        invoiceNo: Joi.string().required(),
+        amount: Joi.number().min(0).required(),
+        date: Joi.date().required(),
+        writeOffData: Joi.object({
+            timeLogs: Joi.array().items(
+                Joi.object({
+                    timeLogId: Joi.string().required(),
+                    writeOffAmount: Joi.number().min(0).required(),
+                    writeOffPercentage: Joi.number().min(0).required(),
+                    originalAmount: Joi.number().min(0).required(),
+                    duration: Joi.number().min(0).required(),
+                    clientId: Joi.string().required(),
+                    jobId: Joi.string().required(),
+                    userId: Joi.string().required(),
+                    jobCategoryId: Joi.string().required(),
+                })
+            ),
+            reason: Joi.string().required(),
+            logic: Joi.string().valid('proportionally', 'manually').required(),
+        })
+    }),
+}
 export default {
     createInvoiceValidation,
     createInvoiceLogValidation,
-    updateInvoiceStatusValidation
+    updateInvoiceStatusValidation,
+    createWriteOffValidation
 };

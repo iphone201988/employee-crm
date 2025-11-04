@@ -38,6 +38,10 @@ const InvoiceSchema: Schema = new Schema(
             type: Number,
             default: 0,
         },
+        originaltotalAmount: {
+             type: Number,
+            default: 0,
+        },
         totalAmount: {
             type: Number,
             default: 0,
@@ -67,6 +71,7 @@ const InvoiceSchema: Schema = new Schema(
 );
 
 // Indexes for better performance
+InvoiceSchema.index({ invoiceNo: 1 });
 InvoiceSchema.index({ companyId: 1 });
 InvoiceSchema.index({ invoiceCreatedBy: 1 });
 InvoiceSchema.index({ clientId: 1 });

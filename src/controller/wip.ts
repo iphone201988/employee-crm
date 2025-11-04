@@ -1326,6 +1326,6 @@ const attachWipTarget = async (req: Request, res: Response, next: NextFunction):
         console.log("error in addWipTarget", error);
         next(error);
     }
-}
+};
 
 export default { workInProgress, createOpenWipBalance, wipBalance, attachWipTarget };
