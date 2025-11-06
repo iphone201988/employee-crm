@@ -630,10 +630,6 @@ const getInvoiceByInvoiceNo = async (req: Request, res: Response, next: NextFunc
                 {
                     path: 'jobId',
                     select: 'name'
-                },
-                {
-                    path: 'jobCategoryId',
-                    select: 'name'
                 }
             ]
         }).lean();
