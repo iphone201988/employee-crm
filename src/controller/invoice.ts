@@ -618,7 +618,24 @@ const getInvoiceByInvoiceNo = async (req: Request, res: Response, next: NextFunc
         const { invoiceNo } = req.params;
         const invoice:any = await InvoiceModel.findOne({ invoiceNo }).populate({
             path: 'timeLogIds',
-
+            populate: [
+                {
+                    path: 'userId',
+                    select: 'name avatarUrl'
+                },
+                {
+                    path: 'clientId',
+                    select: 'name clientRef'
+                },
+                {
+                    path: 'jobId',
+                    select: 'name'
+                },
+                {
+                    path: 'jobCategoryId',
+                    select: 'name'
+                }
+            ]
         }).lean();
         if (!invoice) {
             throw new BadRequestError("Invoice not found");
