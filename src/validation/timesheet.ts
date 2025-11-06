@@ -411,12 +411,18 @@ const addNoteValidation = {
                 'string.base': 'note must be a string',
                 'any.required': 'note is required'
             }),
-        timesheetId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required()
+        timesheetId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional()
             .messages({
-                'string.pattern': 'timesheetId must be a valid MongoDB ObjectId',
-                'any.required': 'timesheetId is required'
+                'string.pattern': 'timesheetId must be a valid MongoDB ObjectId'
             }),
-    })
+        clientId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional()
+            .messages({
+                'string.pattern': 'clientId must be a valid MongoDB ObjectId'
+            }),
+    }).or('timesheetId', 'clientId')
+        .messages({
+            'object.missing': 'Either timesheetId or clientId must be provided'
+        })
 };
 const updateNoteValidation = {
     params: Joi.object({

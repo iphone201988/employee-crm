@@ -141,10 +141,19 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
         }
 
         // Fix date filtering - use correct field names from schema
+        // Filter timesheets where weekStart falls within the date range
         if (weekStart || weekEnd) {
             matchQuery.weekStart = {};
-            if (weekStart) matchQuery.weekStart.$gte = new Date(weekStart as string);
-            if (weekEnd) matchQuery.weekStart.$lte = new Date(weekEnd as string);
+            if (weekStart) {
+                const startDate = new Date(weekStart as string);
+                startDate.setHours(0, 0, 0, 0);
+                matchQuery.weekStart.$gte = startDate;
+            }
+            if (weekEnd) {
+                const endDate = new Date(weekEnd as string);
+                endDate.setHours(23, 59, 59, 999);
+                matchQuery.weekStart.$lte = endDate;
+            }
         }
 
         const pipeline = [
@@ -255,6 +264,47 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                 }
             },
 
+            // Lookup notes for this timesheet
+            {
+                $lookup: {
+                    from: 'notes',
+                    let: { timesheetId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $eq: ['$timesheetId', '$$timesheetId'] }
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: 'users',
+                                localField: 'createdBy',
+                                foreignField: '_id',
+                                as: 'createdBy',
+                                pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1 } }]
+                            }
+                        },
+                        { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
+                        {
+                            $project: {
+                                _id: 1,
+                                note: 1,
+                                createdAt: 1,
+                                updatedAt: 1,
+                                createdBy: 1
+                            }
+                        },
+                        { $sort: { createdAt: -1 } }
+                    ],
+                    as: 'notes'
+                }
+            },
+            {
+                $addFields: {
+                    notesCount: { $size: { $ifNull: ['$notes', []] } }
+                }
+            },
+
             // Facet for pagination and counts
             {
                 $facet: {
@@ -297,7 +347,9 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                                 totalNonBillable: 1,
                                 totalLogged: 1,
                                 totalVariance: 1,
-                                totalCapacity: 1
+                                totalCapacity: 1,
+                                notes: 1,
+                                notesCount: 1
                             }
                         }
                     ],
@@ -318,7 +370,7 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
         ];
 
         // Execute aggregation
-        const [result] = await TimesheetModel.aggregate(pipeline).allowDiskUse(true);
+        const [result] = await TimesheetModel.aggregate(pipeline as any).allowDiskUse(true);
 
         const timesheets = result.data || [];
         const totalTimesheets = result.total[0]?.count || 0;

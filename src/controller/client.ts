@@ -305,6 +305,118 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
                         }
                     ]
                 }
+            },
+            {
+                $lookup: {
+                    from: 'writeoffs',
+                    let: { clientId: '$_id', companyId: ObjectId(req.user.companyId) },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $eq: ['$companyId', '$$companyId'] }
+                            }
+                        },
+                        { $unwind: '$timeLogs' },
+                        {
+                            $match: {
+                                $expr: { $eq: ['$timeLogs.clientId', '$$clientId'] }
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: 'jobs',
+                                localField: 'timeLogs.jobId',
+                                foreignField: '_id',
+                                as: 'jobDetails',
+                                pipeline: [{ $project: { _id: 1, name: 1 } }]
+                            }
+                        },
+                        { $unwind: { path: '$jobDetails', preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: 'users',
+                                localField: 'performedBy',
+                                foreignField: '_id',
+                                as: 'performedByDetails',
+                                pipeline: [{ $project: { _id: 1, name: 1 } }]
+                            }
+                        },
+                        { $unwind: { path: '$performedByDetails', preserveNullAndEmptyArrays: true } },
+                        // First group by write-off document ID and jobId to identify unique occasions per job
+                        {
+                            $group: {
+                                _id: {
+                                    writeOffId: '$_id',
+                                    jobId: '$timeLogs.jobId'
+                                },
+                                writeOffId: { $first: '$_id' },
+                                jobId: { $first: '$timeLogs.jobId' },
+                                jobName: { $first: '$jobDetails.name' },
+                                writeOffAmount: { $sum: '$timeLogs.writeOffAmount' },
+                                createdAt: { $first: '$createdAt' },
+                                reason: { $first: '$reason' },
+                                logic: { $first: '$logic' },
+                                by: { $first: '$performedByDetails.name' }
+                            }
+                        },
+                        // Then group by jobId to aggregate occasions and amounts
+                        {
+                            $group: {
+                                _id: '$jobId',
+                                jobId: { $first: '$jobId' },
+                                jobName: { $first: '$jobName' },
+                                writeOffOccasions: { $sum: 1 },
+                                totalWriteOffAmount: { $sum: '$writeOffAmount' },
+                                occasionDetails: {
+                                    $push: {
+                                        writeOffId: { $toString: { $ifNull: ['$writeOffId', ''] } },
+                                        amount: '$writeOffAmount',
+                                        date: { $ifNull: ['$createdAt', null] },
+                                        reason: { $ifNull: ['$reason', ''] },
+                                        logic: { $ifNull: ['$logic', ''] },
+                                        by: { $ifNull: ['$by', 'N/A'] }
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    as: 'writeOffLogs'
+                }
+            },
+            // Lookup notes for this client
+            {
+                $lookup: {
+                    from: 'notes',
+                    let: { clientId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $eq: ['$clientId', '$$clientId'] }
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: 'users',
+                                localField: 'createdBy',
+                                foreignField: '_id',
+                                as: 'createdBy',
+                                pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1 } }]
+                            }
+                        },
+                        { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
+                        {
+                            $project: {
+                                _id: 1,
+                                note: 1,
+                                createdAt: 1,
+                                updatedAt: 1,
+                                createdBy: 1
+                            }
+                        },
+                        { $sort: { createdAt: -1 } }
+                    ],
+                    as: 'notes'
+                }
             }
 
         ]);
@@ -785,6 +897,77 @@ const getClientBreakdown = async (req: Request, res: Response, next: NextFunctio
                     }
                 }
             },
+
+            // Lookup write-offs for this client
+            {
+                $lookup: {
+                    from: 'writeoffs',
+                    let: { clientId: '$_id', companyId: '$companyId' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $eq: ['$companyId', '$$companyId'] }
+                            }
+                        },
+                        { $unwind: '$timeLogs' },
+                        {
+                            $match: {
+                                $expr: { $eq: ['$timeLogs.clientId', '$$clientId'] }
+                            }
+                        },
+                        {
+                            $group: {
+                                _id: null,
+                                totalWriteOffAmount: { $sum: '$timeLogs.writeOffAmount' }
+                            }
+                        }
+                    ],
+                    as: 'writeOffData'
+                }
+            },
+            {
+                $addFields: {
+                    totalWriteOffAmount: {
+                        $ifNull: [{ $arrayElemAt: ['$writeOffData.totalWriteOffAmount', 0] }, 0]
+                    }
+                }
+            },
+
+            // Lookup notes for this client
+            {
+                $lookup: {
+                    from: 'notes',
+                    let: { clientId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $eq: ['$clientId', '$$clientId'] }
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: 'users',
+                                localField: 'createdBy',
+                                foreignField: '_id',
+                                as: 'createdBy',
+                                pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1 } }]
+                            }
+                        },
+                        { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
+                        {
+                            $project: {
+                                _id: 1,
+                                note: 1,
+                                createdAt: 1,
+                                updatedAt: 1,
+                                createdBy: 1
+                            }
+                        },
+                        { $sort: { createdAt: -1 } }
+                    ],
+                    as: 'notes'
+                }
+            },
             // jobCategory
             {
                 $lookup: {
@@ -834,6 +1017,8 @@ const getClientBreakdown = async (req: Request, res: Response, next: NextFunctio
                     wipPlusOutstanding: { $round: ['$wipPlusOutstanding', 2] },
                     averageBalance: { $round: ['$averageBalance', 2] },
                     totalExpenses: { $round: ['$totalExpenses', 2] },
+                    totalWriteOffAmount: { $round: ['$totalWriteOffAmount', 2] },
+                    notes: 1,
                     createdAt: 1
                 }
             },
@@ -940,6 +1125,32 @@ const getClientBreakdown = async (req: Request, res: Response, next: NextFunctio
                 }
             },
             {
+                $lookup: {
+                    from: 'writeoffs',
+                    let: { clientId: '$_id', companyId: '$companyId' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $eq: ['$companyId', '$$companyId'] }
+                            }
+                        },
+                        { $unwind: '$timeLogs' },
+                        {
+                            $match: {
+                                $expr: { $eq: ['$timeLogs.clientId', '$$clientId'] }
+                            }
+                        },
+                        {
+                            $group: {
+                                _id: null,
+                                totalWriteOffAmount: { $sum: '$timeLogs.writeOffAmount' }
+                            }
+                        }
+                    ],
+                    as: 'writeOffs'
+                }
+            },
+            {
                 $addFields: {
                     wipAmount: { $sum: '$wipLogs.amount' },
                     totalOutstanding: {
@@ -950,6 +1161,9 @@ const getClientBreakdown = async (req: Request, res: Response, next: NextFunctio
                                 in: { $subtract: ['$$inv.totalAmount', '$$inv.paidAmount'] }
                             }
                         }
+                    },
+                    totalWriteOffAmount: {
+                        $ifNull: [{ $arrayElemAt: ['$writeOffs.totalWriteOffAmount', 0] }, 0]
                     }
                 }
             },
@@ -961,7 +1175,8 @@ const getClientBreakdown = async (req: Request, res: Response, next: NextFunctio
                     totalOutstanding: { $sum: '$totalOutstanding' },
                     totalWipAmount: { $sum: '$wipAmount' },
                     totalInvoices: { $sum: { $size: '$invoices' } },
-                    totalExpenses: { $sum: { $sum: '$expenses.totalAmount' } }
+                    totalExpenses: { $sum: { $sum: '$expenses.totalAmount' } },
+                    totalWriteOffAmount: { $sum: '$totalWriteOffAmount' }
                 }
             }
         ];
@@ -973,7 +1188,8 @@ const getClientBreakdown = async (req: Request, res: Response, next: NextFunctio
             totalOutstanding: 0,
             totalWipAmount: 0,
             totalInvoices: 0,
-            totalExpenses: 0
+            totalExpenses: 0,
+            totalWriteOffAmount: 0
         };
 
 
@@ -990,7 +1206,8 @@ const getClientBreakdown = async (req: Request, res: Response, next: NextFunctio
                     totalOutstanding: parseFloat(summary.totalOutstanding.toFixed(2)),
                     totalWipAmount: parseFloat(summary.totalWipAmount.toFixed(2)),
                     totalInvoices: summary.totalInvoices,
-                    totalExpenses: parseFloat(summary.totalExpenses.toFixed(2))
+                    totalExpenses: parseFloat(summary.totalExpenses.toFixed(2)),
+                    totalWriteOffAmount: parseFloat((summary.totalWriteOffAmount || 0).toFixed(2))
                 },
                 pagination: {
                     page,
