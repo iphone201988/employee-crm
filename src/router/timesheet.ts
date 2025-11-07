@@ -12,6 +12,7 @@ timesheetRouter.get("/logs", authenticate, timesheetController.getAllTimeLogs);
 timesheetRouter.post("/add-time-log", authenticate, validate(timesheetValidation.addTimeLogValidation), timesheetController.addTimeLog);
 timesheetRouter.put("/update-time-log/:timeLogId", authenticate, validate(timesheetValidation.updateTimeLogValidation), timesheetController.updateTimeLog);
 timesheetRouter.delete("/delete-time-log", authenticate, validate(timesheetValidation.deleteTimeLogValidation), timesheetController.deleteTimeLog);
+timesheetRouter.delete("/delete", authenticate, validate(timesheetValidation.deleteTimesheetsValidation), timesheetController.deleteTimesheets);
 timesheetRouter.put("/change-time-sheet-status", authenticate, validate(timesheetValidation.changeTimeSheetStatusValidation), timesheetController.chanegTimeSheetStatus);
 
 

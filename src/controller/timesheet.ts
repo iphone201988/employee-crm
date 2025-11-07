@@ -136,8 +136,22 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
             matchQuery.status = status;
         }
 
+        // Handle multi-select userId (comma-separated)
         if (userId) {
-            matchQuery.userId = ObjectId(userId as string);
+            const userIds = (userId as string).split(',')
+                .map(id => id.trim())
+                .filter(id => {
+                    if (!id || id.length !== 24) return false;
+                    try {
+                        ObjectId(id);
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                });
+            if (userIds.length > 0) {
+                matchQuery.userId = { $in: userIds.map(id => ObjectId(id)) };
+            }
         }
 
         // Fix date filtering - use correct field names from schema
@@ -194,12 +208,27 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                     ]
                 }
             }] : []),
-            // macth department
-            ...(departmentId ? [{
-                $match: {
-                    'user.departmentId': ObjectId(departmentId as string)
-                }
-            }] : []),
+            // match department (handle multi-select - comma-separated)
+            ...(departmentId ? (() => {
+                const deptIds = (departmentId as string).split(',')
+                    .map(id => id.trim())
+                    .filter(id => {
+                        if (!id || id.length !== 24) return false;
+                        try {
+                            ObjectId(id);
+                            return true;
+                        } catch {
+                            return false;
+                        }
+                    });
+                return deptIds.length > 0 ? [{
+                    $match: {
+                        'user.departmentId': {
+                            $in: deptIds.map(id => ObjectId(id))
+                        }
+                    }
+                }] : [];
+            })() : []),
 
             // Add calculated fields based on actual schema
             {
@@ -832,6 +861,68 @@ const deleteTimeLog = async (req: Request, res: Response, next: NextFunction): P
         next(error);
     }
 };
+
+const deleteTimesheets = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    const { timesheetIds } = req.body;
+    const companyId = req.user?.companyId;
+    
+    try {
+        if (!timesheetIds || !Array.isArray(timesheetIds) || timesheetIds.length === 0) {
+            throw new BadRequestError("timesheetIds array is required and must not be empty");
+        }
+
+        // Validate all IDs are valid ObjectIds
+        const validIds = timesheetIds.filter(id => {
+            if (!id || id.length !== 24) return false;
+            try {
+                ObjectId(id);
+                return true;
+            } catch {
+                return false;
+            }
+        });
+
+        if (validIds.length === 0) {
+            throw new BadRequestError("No valid timesheet IDs provided");
+        }
+
+        // Find timesheets that belong to the company
+        const timesheets = await TimesheetModel.find({
+            _id: { $in: validIds.map(id => ObjectId(id)) },
+            companyId: companyId
+        });
+
+        if (timesheets.length === 0) {
+            throw new BadRequestError("No timesheets found to delete");
+        }
+
+        // Get all time entry IDs from the timesheets
+        const timeEntryIds = timesheets.flatMap(ts => ts.timeEntries || []);
+
+        // Delete related time entries
+        if (timeEntryIds.length > 0) {
+            await TimeEntryModel.deleteMany({ _id: { $in: timeEntryIds } });
+            // Delete related time logs
+            await TimeLogModel.deleteMany({ timeEntrieId: { $in: timeEntryIds } });
+        }
+
+        // Delete the timesheets
+        const deletedTimesheets = await TimesheetModel.deleteMany({
+            _id: { $in: timesheets.map(ts => ts._id) },
+            companyId: companyId
+        });
+
+        SUCCESS(res, 200, "Timesheets deleted successfully", { 
+            data: { 
+                deletedCount: deletedTimesheets.deletedCount,
+                timesheetIds: timesheets.map(ts => ts._id)
+            } 
+        });
+    } catch (error) {
+        console.log("error in deleteTimesheets", error);
+        next(error);
+    }
+};
 async function logSaved(timesheet: any) {
     const timeEntries = timesheet.timeEntries;
     for (const entryId of timeEntries) {
@@ -941,4 +1032,4 @@ const deleteNote = async (req: Request, res: Response, next: NextFunction): Prom
     }
 };
 
-export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs, addTimeLog, updateTimeLog, deleteTimeLog, chanegTimeSheetStatus, addNote, updateNote, deleteNote };
+export default { addTimesheet, getAllTimesheets, getTimesheet, getAllTimeLogs, addTimeLog, updateTimeLog, deleteTimeLog, deleteTimesheets, chanegTimeSheetStatus, addNote, updateNote, deleteNote };

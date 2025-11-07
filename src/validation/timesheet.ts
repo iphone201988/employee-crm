@@ -391,6 +391,18 @@ const deleteTimeLogValidation = {
             }),
     })
 };
+
+const deleteTimesheetsValidation = {
+    body: Joi.object({
+        timesheetIds: Joi.array().items(Joi.string().pattern(/^[0-9a-fA-F]{24}$/))
+            .min(1)
+            .required()
+            .messages({
+                'string.pattern': 'timesheetIds must be a valid MongoDB ObjectId',
+                'array.min': 'At least one timesheet ID is required',
+            }),
+    })
+};
 const changeTimeSheetStatusValidation = {
     body: Joi.object({
         timeSheetId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/)
@@ -441,4 +453,4 @@ const updateNoteValidation = {
     })
 };
 
-export default { addTimesheetValidation, addTimeLogValidation, updateTimeLogValidation, deleteTimeLogValidation, changeTimeSheetStatusValidation, addNoteValidation, updateNoteValidation };
+export default { addTimesheetValidation, addTimeLogValidation, updateTimeLogValidation, deleteTimeLogValidation, deleteTimesheetsValidation, changeTimeSheetStatusValidation, addNoteValidation, updateNoteValidation };
