@@ -30,7 +30,7 @@ const createWriteOff = async (req: Request, res: Response, next: NextFunction): 
 };
 const getWriteOff = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        let { page = 1, limit = 10, startDate, endDate } = req.query;
+        let { page = 1, limit = 10, startDate, endDate, search, clientId, jobId, logic } = req.query;
         page = parseInt(page as string);
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
@@ -44,12 +44,81 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
             };
         }
 
-        const results = await WriteOffModel.aggregate([
-            { $match: query },
+        // Build match conditions for filters (applied after unwind)
+        const matchConditions: any[] = [];
 
+        // Client filter - handle comma-separated IDs
+        if (clientId) {
+            const clientIds = (clientId as string).split(',').map(id => id.trim()).filter(id => id && id.length === 24);
+            if (clientIds.length > 0) {
+                try {
+                    const validClientIds = clientIds.filter(id => {
+                        try {
+                            ObjectId(id);
+                            return true;
+                        } catch {
+                            return false;
+                        }
+                    });
+                    if (validClientIds.length > 0) {
+                        matchConditions.push({
+                            'timeLogs.clientId': { $in: validClientIds.map(id => ObjectId(id)) }
+                        });
+                    }
+                } catch (e) {
+                    console.log('Error parsing clientIds:', e);
+                }
+            }
+        }
+
+        // Job filter - handle comma-separated IDs
+        if (jobId) {
+            const jobIds = (jobId as string).split(',').map(id => id.trim()).filter(id => id && id.length === 24);
+            if (jobIds.length > 0) {
+                try {
+                    const validJobIds = jobIds.filter(id => {
+                        try {
+                            ObjectId(id);
+                            return true;
+                        } catch {
+                            return false;
+                        }
+                    });
+                    if (validJobIds.length > 0) {
+                        matchConditions.push({
+                            'timeLogs.jobId': { $in: validJobIds.map(id => ObjectId(id)) }
+                        });
+                    }
+                } catch (e) {
+                    console.log('Error parsing jobIds:', e);
+                }
+            }
+        }
+
+        // Logic filter
+        if (logic && logic !== 'all') {
+            matchConditions.push({
+                logic: logic
+            });
+        }
+
+        const pipeline: any[] = [
+            { $match: query },
             // Flatten timeLogs
             { $unwind: '$timeLogs' },
+        ];
 
+        // Apply filter match conditions if any (after unwind)
+        if (matchConditions.length > 0) {
+            pipeline.push({
+                $match: {
+                    $and: matchConditions
+                }
+            });
+        }
+
+        // Continue with lookups
+        pipeline.push(
             // Lookup related collections
             {
                 $lookup: {
@@ -113,27 +182,44 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
                     createdAt: { $first: '$createdAt' },
                     invoiceId: { $first: '$invoiceId' },
                 }
-            },
+            }
+        );
 
-            // Sort by date
-            { $sort: { createdAt: -1 } },
-
-            // Pagination + totals
-            {
-                $facet: {
-                    data: [{ $skip: skip }, { $limit: limit }],
-                    total: [{ $count: "count" }],
-                    totalWriteOffs: [
-                        {
-                            $group: {
-                                _id: null,
-                                totalAmount: { $sum: "$amount" }
-                            }
-                        }
+        // Apply search filter if provided (after grouping)
+        if (search && typeof search === 'string' && search.trim()) {
+            const searchRegex = new RegExp(search.trim(), 'i');
+            pipeline.push({
+                $match: {
+                    $or: [
+                        { 'clientDetails.name': searchRegex },
+                        { 'jobs.name': searchRegex },
+                        { reason: searchRegex },
+                        { by: searchRegex } // Submitted By name (performedByDetails.name)
                     ]
                 }
+            });
+        }
+
+        // Sort by date
+        pipeline.push({ $sort: { createdAt: -1 } });
+
+        // Pagination + totals
+        pipeline.push({
+            $facet: {
+                data: [{ $skip: skip }, { $limit: limit }],
+                total: [{ $count: "count" }],
+                totalWriteOffs: [
+                    {
+                        $group: {
+                            _id: null,
+                            totalAmount: { $sum: "$amount" }
+                        }
+                    }
+                ]
             }
-        ]);
+        });
+
+        const results = await WriteOffModel.aggregate(pipeline);
 
         const total = results[0].total[0]?.count || 0;
         const totalWriteOffs = results[0].totalWriteOffs[0]?.totalAmount || 0;
@@ -685,11 +771,13 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         occasionDetails: {
                             $addToSet: {
                                 writeOffId: '$_id',
-                                amount: '$totalWriteOffAmount',
+                                amount: '$timeLogs.writeOffAmount',
                                 date: '$createdAt',
                                 reason: '$reason',
                                 logic: '$logic',
-                                by: '$performedByDetails.name'
+                                by: '$performedByDetails.name',
+                                clientDetails: '$clientDetails',
+                                jobDetails: '$jobDetails'
                             }
                         }
                     }
@@ -734,11 +822,13 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         occasionDetails: {
                             $addToSet: {
                                 writeOffId: '$_id',
-                                amount: '$totalWriteOffAmount',
+                                amount: '$timeLogs.writeOffAmount',
                                 date: '$createdAt',
                                 reason: '$reason',
                                 logic: '$logic',
-                                by: '$performedByDetails.name'
+                                by: '$performedByDetails.name',
+                                clientDetails: '$clientDetails',
+                                jobDetails: '$jobDetails'
                             }
                         }
                     }
@@ -779,11 +869,13 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         occasionDetails: {
                             $addToSet: {
                                 writeOffId: '$_id',
-                                amount: '$totalWriteOffAmount',
+                                amount: '$timeLogs.writeOffAmount',
                                 date: '$createdAt',
                                 reason: '$reason',
                                 logic: '$logic',
-                                by: '$performedByDetails.name'
+                                by: '$performedByDetails.name',
+                                clientDetails: '$clientDetails',
+                                jobDetails: '$jobDetails'
                             }
                         }
                     }
@@ -828,11 +920,13 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         occasionDetails: {
                             $addToSet: {
                                 writeOffId: '$_id',
-                                amount: '$totalWriteOffAmount',
+                                amount: '$timeLogs.writeOffAmount',
                                 date: '$createdAt',
                                 reason: '$reason',
                                 logic: '$logic',
-                                by: '$performedByDetails.name'
+                                by: '$performedByDetails.name',
+                                clientDetails: '$clientDetails',
+                                jobDetails: '$jobDetails'
                             }
                         }
                     }
