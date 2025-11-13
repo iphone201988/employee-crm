@@ -21,13 +21,16 @@ const addClientValidation = {
         croNumber: Joi.string().optional().messages({
             "string.base": "CRO number must be a string",
         }),
+        croLink: Joi.string().optional().allow('', null).messages({
+            "string.base": "CRO link must be a string",
+        }),
+        clientManagerId: Joi.string().optional().allow('', null).pattern(/^[0-9a-fA-F]{24}$/).messages({
+            "string.base": "Client manager must be a string",
+            "string.pattern.base": "Client manager must be a valid ID",
+        }),
         address: Joi.string().required().messages({
             "string.base": "Address must be a string",
             "any.required": "Address is required",
-        }),
-        contactName: Joi.string().required().messages({
-            "string.base": "Contact name must be a string",
-            "any.required": "Contact name is required",
         }),
         email: Joi.string().email().required().messages({
             "string.base": "Email must be a string",
@@ -54,6 +57,16 @@ const addClientValidation = {
         audit: Joi.boolean().optional().messages({
             "boolean.base": "Audit must be a boolean",
         }),
+        clientStatus: Joi.string().valid('Prospect', 'Current', 'Archived').optional().messages({
+            "string.base": "Client status must be a string",
+            "any.only": "Client status must be one of: Prospect, Current, Archived",
+        }),
+        yearEnd: Joi.string().optional().allow('', null).messages({
+            "string.base": "Year end must be a string",
+        }),
+        arDate: Joi.date().optional().allow(null).messages({
+            "date.base": "AR date must be a date",
+        }),
     }),
 };
 const updateClientValidation = {
@@ -79,11 +92,15 @@ const updateClientValidation = {
         croNumber: Joi.string().optional().messages({
             "string.base": "CRO number must be a string",
         }),
+        croLink: Joi.string().optional().allow('', null).messages({
+            "string.base": "CRO link must be a string",
+        }),
+        clientManagerId: Joi.string().optional().allow('', null).pattern(/^[0-9a-fA-F]{24}$/).messages({
+            "string.base": "Client manager must be a string",
+            "string.pattern.base": "Client manager must be a valid ID",
+        }),
         address: Joi.string().optional().messages({
             "string.base": "Address must be a string",
-        }),
-        contactName: Joi.string().optional().messages({
-            "string.base": "Contact name must be a string",
         }),
         email: Joi.string().email().optional().messages({
             "string.base": "Email must be a string",
@@ -106,6 +123,16 @@ const updateClientValidation = {
         }),
         audit: Joi.boolean().optional().messages({
             "boolean.base": "Audit must be a boolean",
+        }),
+        clientStatus: Joi.string().valid('Prospect', 'Current', 'Archived').optional().messages({
+            "string.base": "Client status must be a string",
+            "any.only": "Client status must be one of: Prospect, Current, Archived",
+        }),
+        yearEnd: Joi.string().optional().allow('', null).messages({
+            "string.base": "Year end must be a string",
+        }),
+        arDate: Joi.date().optional().allow(null).messages({
+            "date.base": "AR date must be a date",
         }),
     }),
 };

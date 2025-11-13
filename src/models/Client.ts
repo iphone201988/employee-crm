@@ -7,8 +7,9 @@ export interface IClient extends Document {
   businessTypeId: Schema.Types.ObjectId;
   taxNumber: string;
   croNumber?: string;
+  croLink?: string;
+  clientManagerId?: Schema.Types.ObjectId;
   address: string;
-  contactName: string;
   email: string;
   emailNote?: string;
   phone: string;
@@ -16,6 +17,9 @@ export interface IClient extends Document {
   onboardedDate: Date;
   amlCompliant: boolean;
   audit: boolean;
+  clientStatus: string;
+  yearEnd?: string;
+  arDate?: Date;
   status: string;
   services: Schema.Types.ObjectId[];
   jobCategories: Schema.Types.ObjectId[];
@@ -56,14 +60,18 @@ const ClientSchema: Schema = new Schema<IClient>(
       default: '',
       trim: true,
     },
+    croLink: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    clientManagerId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+    },
     address: {
       type: String,
       required: true,
-    },
-    contactName: {
-      type: String,
-      required: true,
-      trim: true,
     },
     email: {
       type: String,
@@ -97,6 +105,19 @@ const ClientSchema: Schema = new Schema<IClient>(
     audit: {
       type: Boolean,
       default: false,
+    },
+    clientStatus: {
+      type: String,
+      enum: ['Prospect', 'Current', 'Archived'],
+      default: 'Current',
+    },
+    yearEnd: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    arDate: {
+      type: Date,
     },
     status: {
       type: String,

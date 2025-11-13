@@ -59,12 +59,16 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
         }
 
         // Execute queries in parallel
-        const [clients, totalClients, breakdown, businessTypes] = await Promise.all([
+        const [clientsDocs, totalClients, breakdown, businessTypes] = await Promise.all([
             ClientModel
                 .find(query)
                 .skip(skip)
                 .limit(limit)
                 .populate('businessTypeId')
+                .populate({
+                    path: 'clientManagerId',
+                    select: 'name',
+                })
                 .select('-__v'),
 
             ClientModel.countDocuments(query),
@@ -117,8 +121,28 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
             totalClients,
             limit
         }
+        const normalizedClients = clientsDocs.map((client: any) => {
+            const clientObj = client.toObject();
+            const managerData = clientObj.clientManagerId;
+            let managerName = '';
+            let managerId: string | null = null;
+
+            if (managerData && typeof managerData === 'object' && managerData !== null) {
+                managerName = managerData.name || '';
+                managerId = managerData._id ? String(managerData._id) : null;
+            } else if (typeof managerData === 'string') {
+                managerId = managerData;
+            }
+
+            return {
+                ...clientObj,
+            clientManagerId: managerId || '',
+                clientManager: managerName,
+            };
+        });
+
         const response = {
-            clients,
+            clients: normalizedClients,
             pagination,
             breakdown: breakdownData,
         };
@@ -142,6 +166,20 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
                     localField: 'businessTypeId',
                     foreignField: '_id',
                     as: 'businessTypeId'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'clientManagerId',
+                    foreignField: '_id',
+                    as: 'clientManagerData'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$clientManagerData',
+                    preserveNullAndEmptyArrays: true
                 }
             },
             {
@@ -421,7 +459,29 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
 
         ]);
 
-        SUCCESS(res, 200, "Client fetched successfully", { data: client, });
+        if (!client) {
+            return SUCCESS(res, 200, "Client fetched successfully", { data: null });
+        }
+
+        const managerData: any = client.clientManagerData || null;
+        let managerId: string | null = null;
+        let managerName = '';
+
+        if (managerData && typeof managerData === 'object') {
+            managerId = managerData._id ? String(managerData._id) : null;
+            managerName = managerData.name || '';
+        } else if (client.clientManagerId) {
+            managerId = String(client.clientManagerId);
+        }
+
+        const normalizedClient = {
+            ...client,
+            clientManagerId: managerId || '',
+            clientManager: managerName,
+        };
+        delete (normalizedClient as any).clientManagerData;
+
+        SUCCESS(res, 200, "Client fetched successfully", { data: normalizedClient, });
     } catch (error) {
         console.log("error in getClientById", error);
         next(error);

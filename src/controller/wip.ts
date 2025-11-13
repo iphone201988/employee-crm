@@ -350,7 +350,6 @@ export async function getWIPDashboardData(companyId: string) {
                 clientId: '$_id',
                 clientRef: 1,
                 clientName: '$name',
-                contactName: 1,
                 email: 1,
                 phone: 1,
 
