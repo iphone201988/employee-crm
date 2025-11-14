@@ -10,7 +10,7 @@ export interface IClient extends Document {
   croLink?: string;
   clientManagerId?: Schema.Types.ObjectId;
   address: string;
-  email: string;
+  email?: string;
   emailNote?: string;
   phone: string;
   phoneNote?: string;
@@ -24,6 +24,8 @@ export interface IClient extends Document {
   services: Schema.Types.ObjectId[];
   jobCategories: Schema.Types.ObjectId[];
   wipTargetId: Schema.Types.ObjectId;
+  wipBalance?: number;
+  debtorsBalance?: number;
   createdAt: Date;
   updatedAt: Date;
 
@@ -75,9 +77,10 @@ const ClientSchema: Schema = new Schema<IClient>(
     },
     email: {
       type: String,
-      required: true,
+      required: false,
       lowercase: true,
       trim: true,
+      default: '',
     },
     emailNote: {
       type: String,
@@ -138,6 +141,14 @@ const ClientSchema: Schema = new Schema<IClient>(
     wipTargetId: {
       type: Schema.Types.ObjectId,
       ref: 'WipTragetAmounts',
+    },
+    wipBalance: {
+      type: Number,
+      default: 0,
+    },
+    debtorsBalance: {
+      type: Number,
+      default: 0,
     }
   },
   {

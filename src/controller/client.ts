@@ -9,6 +9,7 @@ import { JobCategoryModel } from "../models/JobCategory";
 import { TimeLogModel } from "../models/TImeLog";
 import { JobModel } from "../models/Job";
 import { ExpensesModel } from "../models/Expenses";
+import { UserModel } from "../models/User";
 import job from "./job";
 
 
@@ -1283,4 +1284,183 @@ const getClientBreakdown = async (req: Request, res: Response, next: NextFunctio
     }
 };
 
-export default { addClient, updateClient, getClients, getClientServices, updateClientService, getClientById, deleteClient, getClientBreakdown };
+const importClients = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { clients } = req.body;
+        const companyId = req.user.companyId;
+
+        if (!Array.isArray(clients) || clients.length === 0) {
+            throw new BadRequestError("Clients array is required and must not be empty");
+        }
+
+        // Get all business types and team members for the company to map names to IDs
+        const [businessTypes, teamMembers] = await Promise.all([
+            BusinessCategoryModel.find({ companyId }).lean(),
+            UserModel.find({ companyId, role: { $ne: 'superadmin' } }).lean()
+        ]);
+
+        // Create maps for quick lookup (using Map that can be updated during import)
+        const businessTypeMap = new Map(businessTypes.map((bt: any) => [bt.name.toLowerCase().trim(), { id: bt._id, name: bt.name }]));
+        const teamMemberMap = new Map(teamMembers.map((tm: any) => [tm.name.toLowerCase().trim(), tm._id]));
+
+        const importedClients = [];
+        const errors = [];
+
+        // Helper function to get or create business type
+        const getOrCreateBusinessType = async (businessTypeName: string): Promise<any> => {
+            if (!businessTypeName) return null;
+            
+            const businessTypeKey = businessTypeName.toLowerCase().trim();
+            const existing = businessTypeMap.get(businessTypeKey);
+            
+            if (existing) {
+                return existing.id;
+            }
+            
+            // Create new business type
+            try {
+                const newBusinessType = await BusinessCategoryModel.create({
+                    name: businessTypeName.trim(),
+                    companyId: companyId
+                });
+                
+                // Update map for future lookups
+                businessTypeMap.set(businessTypeKey, { id: newBusinessType._id, name: newBusinessType.name });
+                
+                return newBusinessType._id;
+            } catch (error: any) {
+                console.error(`Error creating business type "${businessTypeName}":`, error);
+                throw new Error(`Failed to create business type "${businessTypeName}": ${error.message}`);
+            }
+        };
+
+        for (let i = 0; i < clients.length; i++) {
+            const clientData = clients[i];
+            try {
+                // Map Excel columns to client fields
+                const clientRef = (clientData['CLIENT REF.'] || clientData['CLIENT REF'] || '').toString().trim() || 'N/A';
+                const name = (clientData['CLIENT NAME'] || '').toString().trim();
+                const clientManagerName = (clientData['CLIENT MANAGER'] || '').toString().trim();
+                const clientStatus = (clientData['CLIENT STATUS'] || 'Current').toString().trim();
+                const businessTypeName = (clientData['BUSINESS TYPE'] || '').toString().trim();
+                const taxNumber = (clientData['TAX/PPS NO.'] || clientData['TAX/PPS NO'] || '').toString().trim();
+                const yearEnd = (clientData['YEAR END'] || '').toString().trim();
+                const audit = (clientData['IN AUDIT'] || '').toString().trim().toLowerCase();
+                const croNumber = (clientData['CRO NO.'] || clientData['CRO NO'] || '').toString().trim() || '';
+                const croLink = (clientData['CRO LINK'] || '').toString().trim() || '';
+                const arDateStr = clientData['AR DATE'];
+                const address = (clientData['ADDRESS'] || '').toString().trim() || 'N/A';
+                const phone = (clientData['PHONE'] || '').toString().trim() || 'N/A';
+                const phoneNote = (clientData['PHONE NOTE'] || '').toString().trim() || 'N/A';
+                const email = (clientData['EMAIL'] || '').toString().trim() || '';
+                const emailNote = (clientData['EMAIL NOTE'] || '').toString().trim() || 'N/A';
+                const onboardedDateStr = clientData['ONBOARDED DATE'];
+                const amlCompliant = (clientData['AML COMPLAINT'] || clientData['AML COMPLAINT'] || '').toString().trim().toLowerCase();
+                const wipBalance = parseFloat(clientData['WIP BALANCE'] || clientData['WIP BALANCE'] || '0') || 0;
+                const debtorsBalance = parseFloat(clientData['DEBTORS BALANCE'] || clientData['DEBTORS BALA'] || '0') || 0;
+
+                // Validate required fields
+                if (!name) {
+                    errors.push({ row: i + 2, error: `Row ${i + 2}: Client name is required` });
+                    continue;
+                }
+
+                if (!taxNumber) {
+                    errors.push({ row: i + 2, error: `Row ${i + 2}: Tax number is required` });
+                    continue;
+                }
+
+                // Get or create business type
+                let businessTypeId = null;
+                if (businessTypeName) {
+                    try {
+                        businessTypeId = await getOrCreateBusinessType(businessTypeName);
+                    } catch (error: any) {
+                        errors.push({ row: i + 2, error: `Row ${i + 2}: ${error.message}` });
+                        continue;
+                    }
+                }
+
+                // Map client manager name to ID
+                let clientManagerId = null;
+                if (clientManagerName) {
+                    const managerKey = clientManagerName.toLowerCase().trim();
+                    clientManagerId = teamMemberMap.get(managerKey);
+                    // Don't error if manager not found, just skip it
+                }
+
+                // Parse dates
+                let onboardedDate = new Date();
+                if (onboardedDateStr) {
+                    const parsedDate = new Date(onboardedDateStr);
+                    if (!isNaN(parsedDate.getTime())) {
+                        onboardedDate = parsedDate;
+                    }
+                }
+
+                let arDate = undefined;
+                if (arDateStr) {
+                    const parsedArDate = new Date(arDateStr);
+                    if (!isNaN(parsedArDate.getTime())) {
+                        arDate = parsedArDate;
+                    }
+                }
+
+                // Convert boolean fields
+                const auditValue = audit === 'yes' || audit === 'true' || audit === '1';
+                const amlCompliantValue = amlCompliant === 'yes' || amlCompliant === 'true' || amlCompliant === '1';
+
+                // Validate client status
+                const validStatuses = ['Prospect', 'Current', 'Archived'];
+                const finalClientStatus = validStatuses.includes(clientStatus) ? clientStatus : 'Current';
+
+                // Create client object
+                const clientToCreate: any = {
+                    companyId,
+                    clientRef,
+                    name,
+                    businessTypeId,
+                    taxNumber,
+                    croNumber: croNumber || '',
+                    croLink: croLink || '',
+                    clientManagerId: clientManagerId || undefined,
+                    address: address || 'N/A',
+                    email: email || '',
+                    emailNote: emailNote || 'N/A',
+                    phone: phone || 'N/A',
+                    phoneNote: phoneNote || 'N/A',
+                    onboardedDate,
+                    amlCompliant: amlCompliantValue,
+                    audit: auditValue,
+                    clientStatus: finalClientStatus,
+                    yearEnd: yearEnd || '',
+                    arDate: arDate || undefined,
+                    status: 'active',
+                    services: [],
+                    jobCategories: [],
+                    wipBalance: wipBalance || 0,
+                    debtorsBalance: debtorsBalance || 0,
+                };
+
+                const createdClient = await ClientModel.create(clientToCreate);
+                importedClients.push({ row: i + 2, clientId: createdClient._id, name: createdClient.name });
+            } catch (error: any) {
+                errors.push({ row: i + 2, error: `Row ${i + 2}: ${error.message || 'Failed to import client'}` });
+            }
+        }
+
+        SUCCESS(res, 200, "Clients imported successfully", {
+            data: {
+                imported: importedClients.length,
+                failed: errors.length,
+                importedClients,
+                errors: errors.length > 0 ? errors : undefined
+            }
+        });
+    } catch (error) {
+        console.log("error in importClients", error);
+        next(error);
+    }
+};
+
+export default { addClient, updateClient, getClients, getClientServices, updateClientService, getClientById, deleteClient, getClientBreakdown, importClients };

@@ -32,10 +32,9 @@ const addClientValidation = {
             "string.base": "Address must be a string",
             "any.required": "Address is required",
         }),
-        email: Joi.string().email().required().messages({
+        email: Joi.string().email().optional().allow('N/A', null).messages({
             "string.base": "Email must be a string",
             "string.email": "Invalid email format",
-            "any.required": "Email is required",
         }),
         emailNote: Joi.string().optional().messages({
             "string.base": "Email note must be a string",
