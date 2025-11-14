@@ -57,6 +57,7 @@ export interface IUser extends Document {
     updatedAt: Date;
     passwordResetToken: string;
     companyId?: mongoose.Types.ObjectId;
+    newNotification?: boolean;
 }
 
 const userSchema = new Schema<IUser>({
@@ -144,6 +145,10 @@ const userSchema = new Schema<IUser>({
         type: Schema.Types.ObjectId,
         ref: 'User',
         default: null
+    },
+    newNotification: {
+        type: Boolean,
+        default: false
     }
 
 }, {

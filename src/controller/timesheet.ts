@@ -12,6 +12,8 @@ import { TimeLogModel } from "../models/TImeLog";
 import { SettingModel } from "../models/Setting";
 import { NotesModel } from "../models/Notes";
 import { TimeCategoryModel } from "../models/TimeCategory";
+import { NotificationModel } from "../models/Notification";
+import { UserModel } from "../models/User";
 
 const addTimesheet = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
@@ -496,13 +498,25 @@ const getTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
         const clientIds = jobs.map((job: any) => job.clientId);
         const clients = await ClientModel.find({ _id: { $in: clientIds }, status: "active" }, { _id: 1, name: 1, clientRef: 1 }).lean();
 
+        const workSchedule: any = user?.workSchedule || {};
+        const weeklyCapacity = {
+            mon: workSchedule?.monday ?? 0,
+            tue: workSchedule?.tuesday ?? 0,
+            wed: workSchedule?.wednesday ?? 0,
+            thu: workSchedule?.thursday ?? 0,
+            fri: workSchedule?.friday ?? 0,
+            sat: workSchedule?.saturday ?? 0,
+            sun: workSchedule?.sunday ?? 0,
+        };
+
         SUCCESS(res, 200, "Timesheet fetched successfully",
             {
                 data: timesheet,
                 dropdoenOptionals: { clients, jobs, jobCategories, timeCategories },
                 rate: user?.billableRate,
                 name: user?.name,
-                avatarUrl: user?.avatarUrl
+                avatarUrl: user?.avatarUrl,
+                weeklyCapacity
             });
     } catch (error) {
         console.error("Error in getTimesheet:", error);
@@ -993,6 +1007,31 @@ const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunc
             update.status = "rejected";
             update.rejectedAt = new Date().toISOString().slice(0, 10);
             update.rejectedBy = req.userId
+
+            // Create notification for the timesheet owner
+            const timesheetUserId = timeSheet.userId;
+            const weekStart = timeSheet.weekStart;
+            const weekEnd = timeSheet.weekEnd;
+
+            // Format dates for display
+            const formatDate = (date: Date) => {
+                return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            };
+
+            const notification = await NotificationModel.create({
+                userId: timesheetUserId,
+                companyId: req.user.companyId,
+                type: 'timesheet_rejected',
+                title: 'Timesheet Rejected',
+                message: `Your timesheet for the week ${formatDate(weekStart)} - ${formatDate(weekEnd)} has been rejected. Please review and resubmit.`,
+                timesheetId: timeSheetId,
+                weekStart: weekStart,
+                weekEnd: weekEnd,
+                isRead: false,
+            });
+
+            // Update user's newNotification flag
+            await UserModel.findByIdAndUpdate(timesheetUserId, { newNotification: true }, { new: true });
         }
         await TimesheetModel.findByIdAndUpdate(timeSheetId, update, { new: true });
         SUCCESS(res, 200, "Time log updated successfully", { data: {} });

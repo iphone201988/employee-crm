@@ -8,6 +8,7 @@ import timesheetRouter from "./timesheet";
 import noteRouter from "./note";
 import expenseRouter from "./expense";
 import wipRouter from "./wip";
+import notificationRouter from "./notification";
 const router = express.Router();
 
 router.use("/auth", authRouter);
@@ -19,6 +20,7 @@ router.use('/timesheet', timesheetRouter);
 router.use('/note', noteRouter);
 router.use('/expense', expenseRouter);
 router.use('/wip', wipRouter);
+router.use('/notification', notificationRouter);
 
 
 export default router
