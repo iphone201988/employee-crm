@@ -1168,7 +1168,6 @@ const wipBalance = async (req: Request, res: Response) => {
                     },
                 },
             },
-
             {
                 $project: {
                     _id: 0,
@@ -1186,64 +1185,91 @@ const wipBalance = async (req: Request, res: Response) => {
                 },
             },
             { $sort: { clientRef: 1 } },
-            { $skip: skipCount },
-            { $limit: pageSize },
-        ];
-
-        // Get paginated data
-        const wipData = await TimeLogModel.aggregate(pipeline);
-
-        // To get total count for pagination metadata, run a count aggregation (without skip & limit):
-        const countPipeline = [
-            { $match: matchConditions },
             {
-                $group: {
-                    _id: '$clientId',
+                $facet: {
+                    clients: [
+                        { $skip: skipCount },
+                        { $limit: pageSize },
+                    ],
+                    totals: [
+                        {
+                            $group: {
+                                _id: null,
+                                wipBalance: { $sum: '$wipBalance' },
+                                days30: { $sum: '$days30' },
+                                days60: { $sum: '$days60' },
+                                days90: { $sum: '$days90' },
+                                days120: { $sum: '$days120' },
+                                days150: { $sum: '$days150' },
+                                days180: { $sum: '$days180' },
+                                days180Plus: { $sum: '$days180Plus' },
+                                totalClients: { $sum: 1 },
+                            },
+                        },
+                    ],
                 },
             },
             {
-                $count: 'totalClients',
+                $project: {
+                    clients: 1,
+                    totals: {
+                        $ifNull: [
+                            { $arrayElemAt: ['$totals', 0] },
+                            {
+                                wipBalance: 0,
+                                days30: 0,
+                                days60: 0,
+                                days90: 0,
+                                days120: 0,
+                                days150: 0,
+                                days180: 0,
+                                days180Plus: 0,
+                                totalClients: 0,
+                            },
+                        ],
+                    },
+                },
             },
         ];
-        const countResult = await TimeLogModel.aggregate(countPipeline);
-        const totalClients = countResult.length > 0 ? countResult[0].totalClients : 0;
 
-        // Continue calculating totals for current page (already paginated)
-        const totals = wipData.reduce(
-            (acc, client) => {
-                acc.wipBalance += client.wipBalance;
-                acc.days30 += client.days30;
-                acc.days60 += client.days60;
-                acc.days90 += client.days90;
-                acc.days120 += client.days120;
-                acc.days150 += client.days150;
-                acc.days180 += client.days180;
-                acc.days180Plus += client.days180Plus;
-                return acc;
-            },
-            {
-                wipBalance: 0,
-                days30: 0,
-                days60: 0,
-                days90: 0,
-                days120: 0,
-                days150: 0,
-                days180: 0,
-                days180Plus: 0,
-            }
-        );
+        const aggregationResult = await TimeLogModel.aggregate(pipeline);
+        const aggregationPayload = aggregationResult[0] || { clients: [], totals: {} };
+        const wipData = aggregationPayload.clients || [];
+        const totals = aggregationPayload.totals || {
+            wipBalance: 0,
+            days30: 0,
+            days60: 0,
+            days90: 0,
+            days120: 0,
+            days150: 0,
+            days180: 0,
+            days180Plus: 0,
+            totalClients: 0,
+        };
+        const normalizedTotals = {
+            wipBalance: Number(totals.wipBalance || 0),
+            days30: Number(totals.days30 || 0),
+            days60: Number(totals.days60 || 0),
+            days90: Number(totals.days90 || 0),
+            days120: Number(totals.days120 || 0),
+            days150: Number(totals.days150 || 0),
+            days180: Number(totals.days180 || 0),
+            days180Plus: Number(totals.days180Plus || 0),
+            totalClients: Number(totals.totalClients || 0),
+        };
+        const totalClients = normalizedTotals.totalClients || 0;
 
         const summary = {
-            totalWIPBalance: parseFloat(totals.wipBalance.toFixed(2)),
-            current0_30Days: parseFloat(totals.days30.toFixed(2)),
-            days31_60: parseFloat(totals.days60.toFixed(2)),
+            totalWIPBalance: parseFloat(normalizedTotals.wipBalance.toFixed(2)),
+            current0_30Days: parseFloat(normalizedTotals.days30.toFixed(2)),
+            days31_60: parseFloat(normalizedTotals.days60.toFixed(2)),
             days60Plus: parseFloat(
                 (
-                    totals.days90 +
-                    totals.days120 +
-                    totals.days150 +
-                    totals.days180 +
-                    totals.days180Plus
+                    normalizedTotals.days90 +
+                    normalizedTotals.days120 +
+                    normalizedTotals.days150 +
+                    normalizedTotals.days180 +
+                    normalizedTotals.days180Plus
                 ).toFixed(2)
             ),
         };
@@ -1252,14 +1278,14 @@ const wipBalance = async (req: Request, res: Response) => {
             summary,
             clients: wipData,
             totalRow: {
-                wipBalance: parseFloat(totals.wipBalance.toFixed(2)),
-                days30: parseFloat(totals.days30.toFixed(2)),
-                days60: parseFloat(totals.days60.toFixed(2)),
-                days90: parseFloat(totals.days90.toFixed(2)),
-                days120: parseFloat(totals.days120.toFixed(2)),
-                days150: parseFloat(totals.days150.toFixed(2)),
+                wipBalance: parseFloat(normalizedTotals.wipBalance.toFixed(2)),
+                days30: parseFloat(normalizedTotals.days30.toFixed(2)),
+                days60: parseFloat(normalizedTotals.days60.toFixed(2)),
+                days90: parseFloat(normalizedTotals.days90.toFixed(2)),
+                days120: parseFloat(normalizedTotals.days120.toFixed(2)),
+                days150: parseFloat(normalizedTotals.days150.toFixed(2)),
                 days180Plus: parseFloat(
-                    (totals.days180 + totals.days180Plus).toFixed(2)
+                    (normalizedTotals.days180 + normalizedTotals.days180Plus).toFixed(2)
                 ),
             },
             pagination: {

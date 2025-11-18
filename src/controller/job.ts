@@ -398,6 +398,39 @@ const getJobs = async (
                 ])
             ]);
 
+        const jobIds = jobs.map((job: any) => job._id);
+        let jobWipMap = new Map<string, number>();
+        if (jobIds.length > 0) {
+            const wipMatch: any = {
+                jobId: { $in: jobIds },
+                billable: true,
+            };
+            if (req.user.role !== "superAdmin") {
+                wipMatch.companyId = req.user.companyId;
+            }
+            const wipAggregation = await TimeLogModel.aggregate([
+                { $match: wipMatch },
+                {
+                    $group: {
+                        _id: '$jobId',
+                        wipBalance: { $sum: '$amount' }
+                    }
+                }
+            ]);
+            jobWipMap = new Map(
+                wipAggregation.map(item => [item._id.toString(), parseFloat(item.wipBalance.toFixed(2))])
+            );
+        }
+
+        const jobsWithWip = jobs.map((job: any) => {
+            const jobObj = job.toObject ? job.toObject() : job;
+            const wipBalance = jobWipMap.get(job._id.toString()) || 0;
+            return {
+                ...jobObj,
+                wipBalance: parseFloat(wipBalance.toFixed(2))
+            };
+        });
+
         // Process status counts for dashboard stats
         const statusBreakdown = {
             all: totalJobs,
@@ -415,7 +448,7 @@ const getJobs = async (
         const totalPages = Math.ceil(totalJobs / limitNum);
 
         const response = {
-            jobs,
+            jobs: jobsWithWip,
             pagination: {
                 currentPage: pageNum,
                 totalPages,

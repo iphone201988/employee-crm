@@ -78,5 +78,27 @@ const markAllNotificationsAsRead = async (req: Request, res: Response, next: Nex
     }
 };
 
-export default { getNotifications, markNotificationAsRead, markAllNotificationsAsRead };
+// Delete notification
+const deleteNotification = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { notificationId } = req.params;
+        const userId = req.userId;
+
+        const deletedNotification = await NotificationModel.findOneAndDelete({
+            _id: notificationId,
+            userId: userId,
+        });
+
+        if (!deletedNotification) {
+            throw new BadRequestError("Notification not found");
+        }
+
+        SUCCESS(res, 200, "Notification deleted successfully", { data: {} });
+    } catch (error) {
+        console.log("error in deleteNotification", error);
+        next(error);
+    }
+};
+
+export default { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification };
 

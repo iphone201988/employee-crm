@@ -5,7 +5,7 @@ export interface IClient extends Document {
   clientRef: string;
   name: string;
   businessTypeId: Schema.Types.ObjectId;
-  taxNumber: string;
+  taxNumber?: string;
   croNumber?: string;
   croLink?: string;
   clientManagerId?: Schema.Types.ObjectId;
@@ -54,8 +54,8 @@ const ClientSchema: Schema = new Schema<IClient>(
     },
     taxNumber: {
       type: String,
-      required: true,
       trim: true,
+      default: '',
     },
     croNumber: {
       type: String,

@@ -14,9 +14,8 @@ const addClientValidation = {
             "string.base": "Business type ID must be a string",
             "any.required": "Business type ID is required",
         }),
-        taxNumber: Joi.string().required().messages({
+        taxNumber: Joi.string().optional().allow('', null, 'N/A').messages({
             "string.base": "Tax number must be a string",
-            "any.required": "Tax number is required",
         }),
         croNumber: Joi.string().optional().messages({
             "string.base": "CRO number must be a string",

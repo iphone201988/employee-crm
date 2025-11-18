@@ -431,9 +431,13 @@ const addNoteValidation = {
             .messages({
                 'string.pattern': 'clientId must be a valid MongoDB ObjectId'
             }),
-    }).or('timesheetId', 'clientId')
+        jobId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional()
+            .messages({
+                'string.pattern': 'jobId must be a valid MongoDB ObjectId'
+            }),
+    }).or('timesheetId', 'clientId', 'jobId')
         .messages({
-            'object.missing': 'Either timesheetId or clientId must be provided'
+            'object.missing': 'Either timesheetId, clientId, or jobId must be provided'
         })
 };
 const updateNoteValidation = {

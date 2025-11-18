@@ -5,11 +5,11 @@ import { BadRequestError } from "../utils/errors";
 
 const addNote = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        const { note, timesheetId, clientId } = req.body;
+        const { note, timesheetId, clientId, jobId } = req.body;
         
-        // Validate that at least one of timesheetId or clientId is provided
-        if (!timesheetId && !clientId) {
-            throw new BadRequestError("Either timesheetId or clientId must be provided");
+        // Validate that at least one of timesheetId, clientId or jobId is provided
+        if (!timesheetId && !clientId && !jobId) {
+            throw new BadRequestError("Either timesheetId, clientId, or jobId must be provided");
         }
 
         // Add createdBy from authenticated user
@@ -17,6 +17,7 @@ const addNote = async (req: Request, res: Response, next: NextFunction): Promise
             note,
             timesheetId: timesheetId || undefined,
             clientId: clientId || undefined,
+            jobId: jobId || undefined,
             createdBy: req.userId
         };
 
@@ -73,7 +74,7 @@ const deleteNote = async (req: Request, res: Response, next: NextFunction): Prom
 
 const getNotes = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        const { timesheetId, clientId } = req.query;
+        const { timesheetId, clientId, jobId } = req.query;
         
         // Build query
         const query: any = {};
@@ -83,10 +84,13 @@ const getNotes = async (req: Request, res: Response, next: NextFunction): Promis
         if (clientId) {
             query.clientId = clientId;
         }
+        if (jobId) {
+            query.jobId = jobId;
+        }
         
         // If neither is provided, return error
-        if (!timesheetId && !clientId) {
-            throw new BadRequestError("Either timesheetId or clientId must be provided");
+        if (!timesheetId && !clientId && !jobId) {
+            throw new BadRequestError("Either timesheetId, clientId, or jobId must be provided");
         }
         
         const notes = await NotesModel.find(query)
