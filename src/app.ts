@@ -19,7 +19,7 @@ const app = express();
 // }));
 app.use(
   cors({
-    origin: "https://app1.kollabro.com",
+    origin: ["https://app1.kollabro.com", "http://app1.kollabro.com" , "http://localhost:8081"],
     credentials: true, 
   })
 );
