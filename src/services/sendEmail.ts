@@ -12,21 +12,29 @@ const transport = nodemailer.createTransport({
 // Define email templates
 const emailTemplates = {
     sendInviteLink: {
-        subject: "You're Invited to Join Employee Crm",
+        subject: "You're Invited to Join Kollabro",
         text: (link: string) =>
-            `You have been invited to join Employee Crm. Please click the link below to set your password and get started:\n\n${link}`,
+            `You have been invited to join Kollabro. Please click the link below to set your password and get started:\n\n${link}`,
         html: (link: string) => `
             <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-                <h2>You're Invited to Join Employee Crm</h2>
-                <p>You have been invited to join <strong>Employee Crm</strong>.</p>
-                <p>Please click the button below to set your password and activate your account:</p>
-                <a href="${link}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Set Password</a>
-                <p>If the button doesn't work, copy and paste this URL into your browser:</p>
-                <p>${link}</p>
-            </div>
+    <h2>You're Invited to Join Kollabro</h2>
+    <p>You have been invited to join <strong>Kollabro</strong>.</p>
+    <p>Please click the button below to set your password and activate your account:</p>
+
+    <div style="margin-bottom: 40px;">
+        <a href="${link}" 
+           style="background-color: #4CAF50; color: white; padding: 10px 20px; 
+                  text-decoration: none; border-radius: 5px; display: inline-block;">
+            Set Password
+        </a>
+    </div>
+
+    <p>If the button doesn't work, copy and paste this URL into your browser:</p>
+    <p>${link}</p>
+</div>
         `,
     },
-    
+
 };
 
 // Helper function to generate the email body
