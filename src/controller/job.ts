@@ -99,8 +99,8 @@ const getJobs = async (
 
             const matchedIds = matchingClients.map(client => client._id);
             if (clientFilterIds) {
-                const matchedSet = new Set(matchedIds.map(id => id.toString()));
-                clientFilterIds = clientFilterIds.filter(id => matchedSet.has(id.toString()));
+                const matchedSet = new Set(matchedIds.map((id: any) => id.toString()));
+                clientFilterIds = clientFilterIds.filter((id: any) => matchedSet.has(id.toString()));
             } else {
                 clientFilterIds = matchedIds;
             }
