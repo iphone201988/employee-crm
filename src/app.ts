@@ -8,7 +8,8 @@ import { errorHandler } from './middleware/errorHandler';
 import { connectDatabase } from './config/database';
 import router from './router/index';
 import path from 'path';
-
+import https from 'https';
+import fs from 'fs';
 const app = express();
 
 // Security middleware
@@ -19,8 +20,8 @@ const app = express();
 // }));
 app.use(
   cors({
-    origin: ["https://app1.kollabro.com", "http://app1.kollabro.com" , "http://localhost:8081" , "http://152.53.148.63", "http://152.53.148.63:8888"],
-    credentials: true,  
+    origin: ["https://app1.kollabro.com", "http://app1.kollabro.com", "http://localhost:8081", "http://152.53.148.63", "http://152.53.148.63:8888"],
+    credentials: true,
     optionsSuccessStatus: 200,
   })
 );
@@ -39,8 +40,8 @@ if (config.env !== 'test') {
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     timestamp: new Date().toISOString(),
     database: 'connected',
     body: typeof req.body
@@ -48,7 +49,7 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
-app.use('/api/v1',router); 
+app.use('/api/v1', router);
 
 // Error handling
 app.use(notFoundHandler);
@@ -58,10 +59,22 @@ const PORT = config.port || 3000;
 
 const startServer = async () => {
   try {
+
+    try {
+      console.log(fs.readFileSync("/etc/letsencrypt/live/app1.kollabro.com/privkey.pem"),)
+      console.log(fs.readFileSync("/etc/letsencrypt/live/app1.kollabro.com/fullchain.pem"),)
+    } catch (error) {
+      console.log("error here reading file", error)
+    }
+    const options = {
+      key: fs.readFileSync('/etc/letsencrypt/live/app1.kollabro.com/privkey.pem'),
+      cert: fs.readFileSync('/etc/letsencrypt/live/app1.kollabro.com/fullchain.pem'),
+    };
     // Connect to database
     await connectDatabase();
-    
-    app.listen(PORT, () => {
+    const httpsServer = https.createServer(options, app);
+
+    httpsServer.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT} in ${config.env} mode`);
     });
   } catch (error) {
