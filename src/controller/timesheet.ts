@@ -336,6 +336,9 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                 }
             },
 
+            // Sort by latest update before pagination
+            { $sort: { updatedAt: -1 } },
+
             // Facet for pagination and counts
             {
                 $facet: {
@@ -380,7 +383,8 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                                 totalVariance: 1,
                                 totalCapacity: 1,
                                 notes: 1,
-                                notesCount: 1
+                                notesCount: 1,
+                                updatedAt: 1
                             }
                         }
                     ],
@@ -987,26 +991,27 @@ const chanegTimeSheetStatus = async (req: Request, res: Response, next: NextFunc
             throw new Error("Time sheet not found");
         }
         if (status == "reviewed") {
+            const now = new Date();
             update.status = "reviewed";
-            update.reviewedAt = new Date().toISOString().slice(0, 10);
-            update.submittedAt = new Date().toISOString().slice(0, 10);
-            update.reviewedBy = req.userId
-            update.submittedBy = req.userId
+            update.reviewedAt = now;
+            update.submittedAt = timeSheet.submittedAt || now;
+            update.reviewedBy = req.userId;
+            update.submittedBy = timeSheet.submittedBy || req.userId;
             const setting = await SettingModel.findOne({ companyId: req.user.companyId });
             if (setting && setting?.autoApproveTimesheets) {
                 update.status = "autoApproved";
-                update.autoApprovedAt = new Date().toISOString().slice(0, 10);
+                update.autoApprovedAt = new Date();
                 await logSaved(timeSheet);
             }
         } else if (status == "approved") {
             update.status = "approved";
-            update.approvedBy = req.userId
-            update.approvedAt = new Date().toISOString().slice(0, 10);
+            update.approvedBy = req.userId;
+            update.approvedAt = new Date();
             await logSaved(timeSheet);
         } else if (status == "rejected") {
             update.status = "rejected";
-            update.rejectedAt = new Date().toISOString().slice(0, 10);
-            update.rejectedBy = req.userId
+            update.rejectedAt = new Date();
+            update.rejectedBy = req.userId;
 
             // Create notification for the timesheet owner
             const timesheetUserId = timeSheet.userId;

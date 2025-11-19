@@ -3,6 +3,7 @@ import { NextFunction, Request, Response } from "express";
 import { BadRequestError } from "../utils/errors";
 import { SUCCESS } from "../utils/response";
 import { JobModel } from "../models/Job";
+import { ClientModel } from "../models/Client";
 import { ObjectId } from "../utils/utills";
 import { TimeLogModel } from "../models/TImeLog";
 
@@ -27,6 +28,8 @@ interface GetJobsQuery {
     jobManagerId?: string;
     clientId?: string;
     search?: string;
+    clientSearch?: string;
+    jobTypeId?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
     view?: 'daily' | 'weekly' | 'monthly' | 'yearly';
@@ -46,6 +49,7 @@ const getJobs = async (
             jobManagerId = "",
             clientId = "",
             search = "",
+            jobTypeId = "",
             sortBy = "createdAt",
             sortOrder = "desc",
             view = "yearly"
@@ -61,10 +65,6 @@ const getJobs = async (
             query.companyId = req.user.companyId;
         }
 
-        if (status && status !== "All") {
-            query.status = status;
-        }
-
         if (priority && priority !== "All Priority") {
             query.priority = priority;
         }
@@ -73,12 +73,70 @@ const getJobs = async (
             query.jobManagerId = jobManagerId;
         }
 
+        const statusBuckets = ["queued", "inProgress", "forApproval", "completed"];
+
+        let clientFilterIds: any[] | null = null;
         if (clientId) {
-            query.clientId = clientId;
+            try {
+                clientFilterIds = [ObjectId(clientId)];
+            } catch (error) {
+                console.warn("Invalid clientId provided to getJobs:", clientId);
+            }
+        }
+
+        if (jobTypeId) {
+            try {
+                query.jobTypeId = ObjectId(jobTypeId);
+            } catch (error) {
+                console.warn("Invalid jobTypeId provided to getJobs:", jobTypeId);
+            }
         }
 
         if (search) {
-            query.name = { $regex: search, $options: 'i' };
+            const matchingClients = await ClientModel.find({
+                name: { $regex: search, $options: 'i' }
+            }).select('_id');
+
+            const matchedIds = matchingClients.map(client => client._id);
+            if (clientFilterIds) {
+                const matchedSet = new Set(matchedIds.map(id => id.toString()));
+                clientFilterIds = clientFilterIds.filter(id => matchedSet.has(id.toString()));
+            } else {
+                clientFilterIds = matchedIds;
+            }
+        }
+
+        if (clientFilterIds) {
+            if (clientFilterIds.length === 0) {
+                const emptyBreakdown = statusBuckets.reduce((acc: any, key) => {
+                    acc[key] = 0;
+                    return acc;
+                }, { all: 0 });
+
+                return SUCCESS(res, 200, "Jobs fetched successfully", {
+                    data: {
+                        jobs: [],
+                        pagination: {
+                            currentPage: pageNum,
+                            totalPages: 0,
+                            totalJobs: 0,
+                            limit: limitNum
+                        },
+                        statusBreakdown: emptyBreakdown,
+                        teamMemberStats: [],
+                        statusDistribution: [],
+                        jobManagerDistribution: [],
+                        wipFeeDistribution: [],
+                        jobTypeCounts: [],
+                        filters: {
+                            currentView: view,
+                            currentStatus: status || "All",
+                            currentPriority: priority || "All Priority"
+                        }
+                    }
+                });
+            }
+            query.clientId = clientFilterIds.length === 1 ? clientFilterIds[0] : { $in: clientFilterIds };
         }
 
         // Date filtering based on view
@@ -99,6 +157,12 @@ const getJobs = async (
                     query.createdAt = { $gte: startDate };
                     break;
             }
+        }
+
+        const baseQuery = { ...query };
+
+        if (status && status !== "All") {
+            query.status = status;
         }
 
         // Build sort object
@@ -190,7 +254,7 @@ const getJobs = async (
                             // Status breakdown
                             statusBreakdown: {
                                 $reduce: {
-                                    input: ["queued", "inProgress", "withClient", "forApproval", "completed"],
+                                    input: statusBuckets,
                                     initialValue: {},
                                     in: {
                                         $mergeObjects: [
@@ -361,7 +425,7 @@ const getJobs = async (
 
                 // Status counts for bottom tabs
                 JobModel.aggregate([
-                    { $match: {} }, // All jobs for status counts
+                    { $match: baseQuery },
                     {
                         $group: {
                             _id: '$status',
@@ -432,14 +496,10 @@ const getJobs = async (
         });
 
         // Process status counts for dashboard stats
-        const statusBreakdown = {
-            all: totalJobs,
-            queued: 0,
-            inProgress: 0,
-            withClient: 0,
-            forApproval: 0,
-            completed: 0
-        };
+        const statusBreakdown = statusBuckets.reduce((acc: any, key) => {
+            acc[key] = 0;
+            return acc;
+        }, { all: totalJobs });
 
         statusCounts.forEach(item => {
             statusBreakdown[item._id as keyof typeof statusBreakdown] = item.count;

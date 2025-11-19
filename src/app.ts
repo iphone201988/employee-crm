@@ -9,6 +9,7 @@ import { connectDatabase } from './config/database';
 import router from './router/index';
 import path from 'path';
 import https from 'https';
+import http from 'http';
 import fs from 'fs';
 const app = express();
 
@@ -20,7 +21,7 @@ const app = express();
 // }));
 app.use(
   cors({
-    origin: ["https://app1.kollabro.com", "http://app1.kollabro.com", "http://localhost:8080", "http://152.53.148.63", "http://152.53.148.63:8888"],
+    origin: ["https://app1.kollabro.com", "http://app1.kollabro.com", "http://localhost:8080", "http://localhost:8081", "http://152.53.148.63", "http://152.53.148.63:8888"],
     credentials: true,
     optionsSuccessStatus: 200,
   })
@@ -72,8 +73,8 @@ const startServer = async () => {
     };
     // Connect to database
     await connectDatabase();
-    const httpsServer = https.createServer(options, app);
-
+    // const httpsServer = http.createServer(app);
+    const httpsServer = https.createServer(options, app)
     httpsServer.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT} in ${config.env} mode`);
     });

@@ -42,6 +42,18 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
         page = parseInt(page as string);
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
+        const parseArrayParam = (value: any): string[] => {
+            if (!value) return [];
+            if (Array.isArray(value)) {
+                return value.map((item) => String(item).trim()).filter(Boolean);
+            }
+            if (typeof value === 'string') {
+                return value.split(',').map(item => item.trim()).filter(Boolean);
+            }
+            return [];
+        };
+        const isValidObjectId = (value: string) => /^[0-9a-fA-F]{24}$/.test(value);
+
         const query: any = { status: "active" };
         if (req.user.role !== "superAdmin") {
             query.companyId = req.user.companyId;
@@ -54,15 +66,54 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
             ];
         }
 
-        // Filter by businessTypeId (ObjectId)
-        if (businessTypeId) {
-            query.businessTypeId = businessTypeId;
+        const businessTypeIdsParam = parseArrayParam(req.query.businessTypeIds);
+        if (businessTypeId && typeof businessTypeId === 'string' && businessTypeId.trim()) {
+            businessTypeIdsParam.push(businessTypeId as string);
+        }
+        const businessTypeObjectIds = businessTypeIdsParam
+            .filter(isValidObjectId)
+            .map((id) => ObjectId(id));
+        if (businessTypeObjectIds.length === 1) {
+            query.businessTypeId = businessTypeObjectIds[0];
+        } else if (businessTypeObjectIds.length > 1) {
+            query.businessTypeId = { $in: businessTypeObjectIds };
+        }
+
+        const statusesFilter = parseArrayParam(req.query.statuses);
+        if (statusesFilter.length === 1) {
+            query.clientStatus = statusesFilter[0];
+        } else if (statusesFilter.length > 1) {
+            query.clientStatus = { $in: statusesFilter };
+        }
+
+        const auditSelections = parseArrayParam(req.query.audit).map(value => value.toLowerCase());
+        const auditValues: boolean[] = [];
+        if (auditSelections.includes('yes')) auditValues.push(true);
+        if (auditSelections.includes('no')) auditValues.push(false);
+        if (auditValues.length === 1) {
+            query.audit = auditValues[0];
+        }
+
+        const amlSelections = parseArrayParam(req.query.aml).map(value => value.toLowerCase());
+        const amlValues: boolean[] = [];
+        if (amlSelections.includes('yes')) amlValues.push(true);
+        if (amlSelections.includes('no')) amlValues.push(false);
+        if (amlValues.length === 1) {
+            query.amlCompliant = amlValues[0];
+        }
+
+        const yearEndsFilter = parseArrayParam(req.query.yearEnds);
+        if (yearEndsFilter.length === 1) {
+            query.yearEnd = yearEndsFilter[0];
+        } else if (yearEndsFilter.length > 1) {
+            query.yearEnd = { $in: yearEndsFilter };
         }
 
         // Execute queries in parallel
         const [clientsDocs, totalClients, breakdown, businessTypes] = await Promise.all([
             ClientModel
                 .find(query)
+                .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
                 .populate('businessTypeId')
