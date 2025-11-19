@@ -749,11 +749,17 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                 }
             },
 
-            // total client WIP amount = sum of job wipAmount
+            // total client WIP amount = sum of job wipAmount + imported wipBalance
             {
                 $addFields: {
-                    clientTotalWipAmount: { $sum: '$jobs.wipAmount' },
-                    clientTotalWipJobs: { $size: '$jobs' }
+                    clientTotalWipAmount: { 
+                        $add: [
+                            { $sum: '$jobs.wipAmount' },
+                            { $ifNull: ['$wipBalance', 0] }
+                        ]
+                    },
+                    clientTotalWipJobs: { $size: '$jobs' },
+                    importedWipBalance: { $ifNull: ['$wipBalance', 0] }
                 }
             },
             {
@@ -997,13 +1003,26 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                         $cond: {
                             if: {
                                 $gt:
-                                    [{ $sum: '$jobs.wipAmount' }, '$clientWipTraget.amount']
+                                    [
+                                        { 
+                                            $add: [
+                                                { $sum: '$jobs.wipAmount' },
+                                                { $ifNull: ['$wipBalance', 0] }
+                                            ]
+                                        }, 
+                                        '$clientWipTraget.amount'
+                                    ]
                             },
                             then: '2',
                             else: '1'
                         }
                     },
-                    clientWipAmount: { $sum: '$jobs.wipAmount' }
+                    clientWipAmount: { 
+                        $add: [
+                            { $sum: '$jobs.wipAmount' },
+                            { $ifNull: ['$wipBalance', 0] }
+                        ]
+                    }
                 }
             },
             {
@@ -1011,7 +1030,14 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                     _id: null,
                     totalClients: { $sum: 1 },
                     totalJobs: { $sum: { $size: '$jobs' } },
-                    totalWipAmount: { $sum: { $sum: '$jobs.wipAmount' } },
+                    totalWipAmount: { 
+                        $sum: { 
+                            $add: [
+                                { $sum: '$jobs.wipAmount' },
+                                { $ifNull: ['$wipBalance', 0] }
+                            ]
+                        }
+                    },
                     // amount those who are target met 2
                     totalInvoicedAmount: {
                         $sum: {

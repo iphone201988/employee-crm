@@ -26,6 +26,7 @@ const emailTemplates = {
             </div>
         `,
     },
+    
 };
 
 // Helper function to generate the email body
