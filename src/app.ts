@@ -17,7 +17,12 @@ const app = express();
 //   origin: config.cors.origin,
 //   credentials: true,
 // }));
-app.use(cors());
+app.use(
+  cors({
+    origin: "https://app1.kollabro.com",
+    credentials: true, 
+  })
+);
 
 
 
