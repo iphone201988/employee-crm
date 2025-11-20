@@ -2,7 +2,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 
 const InvoiceSchema: Schema = new Schema(
-    {   invoiceNo: {
+    {
+        invoiceNo: {
             type: String,
             required: true,
         },
@@ -22,6 +23,15 @@ const InvoiceSchema: Schema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'Client',
         },
+        jobId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Job',
+        },
+        scope: {
+            type: String,
+            enum: ['client', 'job'],
+            default: 'client'
+        },
         netAmount: {
             type: Number,
             default: 0,
@@ -39,7 +49,7 @@ const InvoiceSchema: Schema = new Schema(
             default: 0,
         },
         originaltotalAmount: {
-             type: Number,
+            type: Number,
             default: 0,
         },
         totalAmount: {
@@ -51,6 +61,14 @@ const InvoiceSchema: Schema = new Schema(
             default: 0,
         },
         status: {
+            type: String,
+        },
+        source: {
+            type: String,
+            enum: ['system', 'manual'],
+            default: 'system'
+        },
+        attachmentUrl: {
             type: String,
         },
         timeLogIds: [{

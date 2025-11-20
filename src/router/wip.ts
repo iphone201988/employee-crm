@@ -21,6 +21,7 @@ wipRouter.post("/invoice/log", authenticate, validate(wipValidation.createInvoic
 wipRouter.patch("/invoice/status-change", authenticate, validate(wipValidation.updateInvoiceStatusValidation), invoiceController.invoiceStatusChange);
 wipRouter.get("/invoice/invoice-no/:invoiceNo", authenticate, invoiceController.getInvoiceByInvoiceNo);
 wipRouter.get("/invoice/:invoiceId", authenticate, invoiceController.getInvoiceById);
+wipRouter.post("/invoice/time-logs", authenticate, validate(wipValidation.getInvoiceTimeLogsValidation), invoiceController.getInvoiceTimeLogs);
 
 
 // Write off

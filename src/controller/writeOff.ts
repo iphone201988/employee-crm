@@ -19,8 +19,6 @@ const createWriteOff = async (req: Request, res: Response, next: NextFunction): 
         writeOffData.performedBy = req.userId;
 
         const writeOff = await WriteOffModel.create(writeOffData);
-        invoice.totalAmount = amount;
-        await invoice.save();
         await InvoiceLogModel.create({ invoiceId: invoice._id, action: 'writeOff', amount: writeOff.totalWriteOffAmount, date, companyId: req.user.companyId, performedBy: req.userId });
         SUCCESS(res, 200, "Write off created successfully", { data: writeOff });
     } catch (error) {

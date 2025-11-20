@@ -7,20 +7,38 @@ import { TimeLogModel } from "../models/TImeLog";
 import { ExpensesModel } from "../models/Expenses";
 import { WipOpenBalanceModel } from "../models/wipOpenBalance";
 import { InvoiceLogModel } from "../models/InvoiceLog";
+import { ClientModel } from "../models/Client";
+import { JobModel } from "../models/Job";
 import { WriteOffModel } from "../models/WriteOff";
 const createInvoice = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
-        let { date, clientId, timeLogIds, expenseIds, wipOpenBalanceIds, newExpenses } = req.body;
+        let { date, clientId, timeLogIds = [], expenseIds = [], wipOpenBalanceIds = [], newExpenses = [], invoiceNo, source, attachmentUrl, writeOffData, jobId, scope } = req.body;
         req.body.companyId = req.user.companyId;
         req.body.invoiceCreatedBy = req.userId;
-        let invoiceNo = `INV-${generateOtp(6)}`;
-        req.body.invoiceNo = invoiceNo;
+        const generatedInvoiceNo = invoiceNo || `INV-${generateOtp(6)}`;
+        req.body.invoiceNo = generatedInvoiceNo;
         req.body.status = 'issued';
         req.body.originalNetAmount = req.body.netAmount || 0;
+        req.body.source = source || 'system';
+        if (attachmentUrl) {
+            req.body.attachmentUrl = attachmentUrl;
+        }
+        if (jobId) {
+            req.body.jobId = jobId;
+        }
+        if (scope) {
+            req.body.scope = scope;
+        }
         const newInvoice = await InvoiceModel.create(req.body);
-        await TimeLogModel.updateMany({ _id: { $in: timeLogIds } }, { status: 'invoice' });
-        await ExpensesModel.updateMany({ _id: { $in: expenseIds } }, { status: 'yes' });
-        await WipOpenBalanceModel.updateMany({ _id: { $in: wipOpenBalanceIds } }, { status: 'invoiced' });
+        if (timeLogIds?.length) {
+            await TimeLogModel.updateMany({ _id: { $in: timeLogIds } }, { status: 'invoiced' });
+        }
+        if (expenseIds?.length) {
+            await ExpensesModel.updateMany({ _id: { $in: expenseIds } }, { status: 'yes' });
+        }
+        if (wipOpenBalanceIds?.length) {
+            await WipOpenBalanceModel.updateMany({ _id: { $in: wipOpenBalanceIds } }, { status: 'invoiced' });
+        }
         for (let exp of newExpenses || []) {
             exp.companyId = req.user.companyId;
             exp.submittedBy = req.userId;
@@ -39,6 +57,74 @@ const createInvoice = async (req: Request, res: Response, next: NextFunction): P
             date: date || new Date(),
             performedBy: req.userId
         });
+        if (writeOffData && Array.isArray(writeOffData.timeLogs) && writeOffData.timeLogs.length > 0) {
+            const writeOffPayload = {
+                invoiceId: newInvoice._id,
+                timeLogs: writeOffData.timeLogs.map((log: any) => ({
+                    timeLogId: ObjectId(log.timeLogId),
+                    writeOffAmount: Number(log.writeOffAmount || 0),
+                    writeOffPercentage: Number(log.writeOffPercentage || 0),
+                    originalAmount: Number(log.originalAmount || 0),
+                    duration: Number(log.duration || 0),
+                    clientId: ObjectId(log.clientId || clientId),
+                    jobId: ObjectId(log.jobId || jobId),
+                    userId: ObjectId(log.userId),
+                    jobCategoryId: ObjectId(log.jobCategoryId),
+                })),
+                reason: writeOffData.reason || '',
+                logic: writeOffData.logic || 'proportionally',
+                performedBy: req.userId,
+                companyId: req.user.companyId,
+            };
+
+            const writeOff = await WriteOffModel.create(writeOffPayload);
+        if (writeOff?.timeLogs?.length) {
+            await TimeLogModel.updateMany(
+                { _id: { $in: writeOff.timeLogs.map((log: any) => log.timeLogId) } },
+                { status: 'writeOff' }
+            );
+        }
+            await InvoiceLogModel.create({
+                invoiceId: newInvoice._id,
+                action: 'writeOff',
+                amount: writeOff.totalWriteOffAmount,
+                companyId: req.user.companyId,
+                date: date || new Date(),
+                performedBy: req.userId
+            });
+        }
+
+        const invoiceNetAmount = Number(req.body.netAmount || 0);
+        let timeLogsAmount = 0;
+        let openBalanceAmount = 0;
+        const newExpensesNet = (newExpenses || []).reduce((sum: number, exp: any) => sum + Number(exp.netAmount || 0), 0);
+
+        if (timeLogIds?.length) {
+            const timeLogSum = await TimeLogModel.aggregate([
+                { $match: { _id: { $in: timeLogIds.map((id: string) => ObjectId(id)) }, companyId: req.user.companyId } },
+                { $group: { _id: null, total: { $sum: '$amount' } } }
+            ]);
+            timeLogsAmount = Number(timeLogSum[0]?.total || 0);
+        }
+
+        if (wipOpenBalanceIds?.length) {
+            const openBalanceSum = await WipOpenBalanceModel.aggregate([
+                { $match: { _id: { $in: wipOpenBalanceIds.map((id: string) => ObjectId(id)) }, companyId: req.user.companyId } },
+                { $group: { _id: null, total: { $sum: '$amount' } } }
+            ]);
+            openBalanceAmount = Number(openBalanceSum[0]?.total || 0);
+        }
+
+        const importedPortion = Math.max(0, invoiceNetAmount - timeLogsAmount - openBalanceAmount - newExpensesNet);
+       
+            const clientDoc = await ClientModel.findById(clientId).select('wipBalance');
+            if (clientDoc) {
+               
+                clientDoc.wipBalance = 0
+                await clientDoc.save();
+            }
+        
+
         SUCCESS(res, 200, "Invoice created successfully", { data: newInvoice });
     } catch (error) {
         console.log("error in createInvoice", error);
@@ -311,6 +397,45 @@ const createInvoiceLog = async (req: Request, res: Response, next: NextFunction)
         SUCCESS(res, 200, "Invoice log created successfully", { data: invoiceLog });
     } catch (error) {
         console.log("error in createInvoiceLog", error);
+        next(error);
+    }
+};
+
+const getInvoiceTimeLogs = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { timeLogIds = [] } = req.body;
+        if (!Array.isArray(timeLogIds) || timeLogIds.length === 0) {
+            throw new BadRequestError("timeLogIds are required");
+        }
+
+        const ids = timeLogIds.map((id: string) => ObjectId(id));
+        const timeLogs = await TimeLogModel.find({
+            _id: { $in: ids },
+            companyId: req.user.companyId
+        })
+            .populate('userId', 'name')
+            .populate('jobId', 'name clientId jobTypeId')
+            .populate('jobTypeId', 'name')
+            .lean();
+
+        const formatted = timeLogs.map((log: any) => ({
+            timeLogId: log._id,
+            description: log.description,
+            date: log.date,
+            duration: log.duration,
+            rate: log.rate,
+            amount: log.amount,
+            clientId: log.clientId,
+            jobId: log.jobId?._id || log.jobId,
+            jobName: log.jobId?.name,
+            userId: log.userId?._id || log.userId,
+            userName: log.userId?.name,
+            jobCategoryId: log.jobTypeId?._id || log.jobTypeId,
+        }));
+
+        SUCCESS(res, 200, "Invoice time logs fetched successfully", { data: formatted });
+    } catch (error) {
+        console.log("error in getInvoiceTimeLogs", error);
         next(error);
     }
 };
@@ -653,4 +778,5 @@ export default {
     getInvoiceById,
     getAgedDebtors,
     getInvoiceByInvoiceNo,
+    getInvoiceTimeLogs,
 };
