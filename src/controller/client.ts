@@ -14,14 +14,178 @@ import job from "./job";
 import { InvoiceModel } from "../models/Invoice";
 import { InvoiceLogModel } from "../models/InvoiceLog";
 
+/**
+ * Parse date consistently to avoid timezone shifts
+ * Handles:
+ * - Excel serial date numbers (e.g., 44927)
+ * - Date objects (from XLSX library)
+ * - DD/MM/YYYY format strings (for Excel imports)
+ * - ISO date strings (for manual creation)
+ * Returns UTC date at midnight to ensure date doesn't change
+ */
+const parseDateSafely = (dateValue: any): Date | undefined => {
+    // Handle null, undefined, empty values, and 0 (which Excel might return for empty cells)
+    // Also handle falsy values and empty strings/whitespace
+    if (dateValue === null || 
+        dateValue === undefined || 
+        dateValue === '' || 
+        dateValue === 0 || 
+        dateValue === '0' ||
+        (typeof dateValue === 'string' && dateValue.trim() === '') ||
+        (typeof dateValue === 'string' && dateValue.trim().toLowerCase() === 'null') ||
+        (typeof dateValue === 'string' && dateValue.trim().toLowerCase() === 'undefined') ||
+        (typeof dateValue === 'string' && dateValue.trim().toLowerCase() === 'nan') ||
+        (typeof dateValue === 'string' && dateValue.trim() === '-') ||
+        (typeof dateValue === 'string' && dateValue.trim() === 'N/A') ||
+        (typeof dateValue === 'string' && dateValue.trim() === 'n/a')) {
+        return undefined;
+    }
 
+    // Handle Date objects (from XLSX library when it converts dates)
+    if (dateValue instanceof Date) {
+        if (isNaN(dateValue.getTime())) {
+            return undefined; // Invalid date
+        }
+        // Extract year, month, day first to check validity
+        const year = dateValue.getFullYear();
+        const month = dateValue.getMonth();
+        const day = dateValue.getDate();
+        
+        // Validate it's a reasonable date (not 1970 from invalid parsing)
+        // Also reject dates that are exactly 1970-01-01 as it's likely from invalid parsing
+        // Reject any date from 1970 as it's likely from empty/invalid parsing
+        if (year < 1900 || year > 2100 || year === 1970) {
+            return undefined; // Reject dates outside reasonable range or epoch year
+        }
+        
+        return new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+    }
+
+    // Handle numbers (Excel serial date numbers)
+    // Excel serial date: days since January 1, 1900
+    // Excel incorrectly treats 1900 as a leap year
+    if (typeof dateValue === 'number') {
+        // Check if it's a reasonable Excel serial date (between 1 and ~100000)
+        // Dates before 1900 or after 2174 would be outside this range
+        // Also reject 0 or negative numbers, and very small numbers that might be timestamps
+        // Excel serial date 1 = 1900-01-01, so we need at least 1
+        if (dateValue > 0 && dateValue < 100000 && dateValue >= 1) {
+            // Convert Excel serial date to JavaScript date
+            // Excel epoch is 1900-01-01, but Excel treats 1900 as leap year
+            // Standard conversion: (excelSerial - 25569) * 86400000
+            // But accounting for Excel's bug: use Dec 30, 1899 as base
+            const excelEpoch = new Date(Date.UTC(1899, 11, 30)); // Dec 30, 1899 (day 0 in Excel)
+            const jsDate = new Date(excelEpoch.getTime() + (dateValue - 1) * 86400000);
+            
+            if (!isNaN(jsDate.getTime())) {
+                const year = jsDate.getUTCFullYear();
+                const month = jsDate.getUTCMonth();
+                const day = jsDate.getUTCDate();
+                
+                // Explicitly reject 1970-01-01 as it's likely from invalid conversion
+                if (year === 1970 && month === 0 && day === 1) {
+                    return undefined;
+                }
+                
+                // Validate it's a reasonable date (not 1970 from invalid conversion)
+                if (year >= 1900 && year <= 2100) {
+                    // Extract year, month, day and create UTC date at midnight
+                    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+                }
+            }
+        }
+        // If it's a very large number, it might be a timestamp in milliseconds
+        // But we'll skip this to avoid confusion with Excel serial dates
+        return undefined;
+    }
+
+    // Handle strings
+    const dateStr = dateValue.toString().trim();
+    if (!dateStr || dateStr === '' || dateStr === 'null' || dateStr === 'undefined' || dateStr === 'NaN' || dateStr === '0') {
+        return undefined;
+    }
+
+    // Try DD/MM/YYYY format first (for Excel imports as strings)
+    const ddmmyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (ddmmyyyyMatch) {
+        const day = parseInt(ddmmyyyyMatch[1], 10);
+        const month = parseInt(ddmmyyyyMatch[2], 10) - 1; // Month is 0-indexed
+        const year = parseInt(ddmmyyyyMatch[3], 10);
+        
+        // Validate day and month ranges
+        if (day < 1 || day > 31 || month < 0 || month > 11) {
+            return undefined;
+        }
+        
+        // Create UTC date at midnight to avoid timezone shifts
+        const parsedDate = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+        
+        // Validate the date (check if it's a valid date and matches input)
+        if (!isNaN(parsedDate.getTime()) && 
+            parsedDate.getUTCDate() === day && 
+            parsedDate.getUTCMonth() === month && 
+            parsedDate.getUTCFullYear() === year) {
+            return parsedDate;
+        }
+    }
+
+    // Try parsing as ISO date string or standard Date format
+    const parsedDate = new Date(dateStr);
+    if (!isNaN(parsedDate.getTime())) {
+        // Check if it's a reasonable date (not epoch 1970-01-01 from invalid parsing)
+        const year = parsedDate.getFullYear();
+        const month = parsedDate.getMonth();
+        const day = parsedDate.getDate();
+        
+        // Explicitly reject 1970-01-01 as it's likely from invalid parsing
+        if (year === 1970 && month === 0 && day === 1) {
+            return undefined;
+        }
+        
+        if (year >= 1900 && year <= 2100) {
+            // Convert to UTC at midnight to avoid timezone shifts
+            const utcYear = parsedDate.getUTCFullYear();
+            const utcMonth = parsedDate.getUTCMonth();
+            const utcDay = parsedDate.getUTCDate();
+            
+            // Double-check the UTC date is not 1970-01-01
+            if (utcYear === 1970 && utcMonth === 0 && utcDay === 1) {
+                return undefined;
+            }
+            
+            return new Date(Date.UTC(utcYear, utcMonth, utcDay, 0, 0, 0, 0));
+        }
+    }
+
+    return undefined;
+};
 
 const addClient = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         if (req.user.role !== "superAdmin") {
             req.body.companyId = req.user.companyId;
         }
-        await ClientModel.create(req.body);
+        
+        // Parse dates consistently to avoid timezone shifts
+        const clientData: any = { ...req.body };
+        if (clientData.onboardedDate !== undefined && clientData.onboardedDate !== null) {
+            const parsedDate = parseDateSafely(clientData.onboardedDate);
+            if (parsedDate !== undefined) {
+                clientData.onboardedDate = parsedDate;
+            } else {
+                delete clientData.onboardedDate; // Remove if invalid
+            }
+        }
+        if (clientData.arDate !== undefined && clientData.arDate !== null) {
+            const parsedDate = parseDateSafely(clientData.arDate);
+            if (parsedDate !== undefined) {
+                clientData.arDate = parsedDate;
+            } else {
+                delete clientData.arDate; // Remove if invalid
+            }
+        }
+        
+        await ClientModel.create(clientData);
         SUCCESS(res, 200, "Client added successfully", { data: {} });
     } catch (error) {
         console.log("error in addClient", error);
@@ -31,7 +195,29 @@ const addClient = async (req: Request, res: Response, next: NextFunction): Promi
 const updateClient = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const { clientId } = req.params;
-        await ClientModel.findByIdAndUpdate(clientId, req.body, { new: true });
+        
+        // Parse dates consistently to avoid timezone shifts
+        const clientData: any = { ...req.body };
+        if (clientData.onboardedDate !== undefined && clientData.onboardedDate !== null) {
+            const parsedDate = parseDateSafely(clientData.onboardedDate);
+            if (parsedDate !== undefined) {
+                clientData.onboardedDate = parsedDate;
+            } else {
+                // If date is invalid, set to null to clear it
+                clientData.onboardedDate = null;
+            }
+        }
+        if (clientData.arDate !== undefined && clientData.arDate !== null) {
+            const parsedDate = parseDateSafely(clientData.arDate);
+            if (parsedDate !== undefined) {
+                clientData.arDate = parsedDate;
+            } else {
+                // If date is invalid, set to null to clear it
+                clientData.arDate = null;
+            }
+        }
+        
+        await ClientModel.findByIdAndUpdate(clientId, clientData, { new: true });
         SUCCESS(res, 200, "Client updated successfully", { data: {} });
     } catch (error) {
         console.log("error in updateClient", error);
@@ -1426,13 +1612,19 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
                 const audit = (clientData['IN AUDIT'] || '').toString().trim().toLowerCase();
                 const croNumber = (clientData['CRO NO.'] || clientData['CRO NO'] || '').toString().trim() || '';
                 const croLink = (clientData['CRO LINK'] || '').toString().trim() || '';
-                const arDateStr = clientData['AR DATE'];
+                // Extract date values - handle undefined, null, empty strings consistently
+                const arDateStr = clientData['AR DATE'] !== undefined && clientData['AR DATE'] !== null && clientData['AR DATE'] !== '' 
+                    ? clientData['AR DATE'] 
+                    : undefined;
                 const address = (clientData['ADDRESS'] || '').toString().trim() || 'N/A';
                 const phone = (clientData['PHONE'] || '').toString().trim() || 'N/A';
                 const phoneNote = (clientData['PHONE NOTE'] || '').toString().trim() || 'N/A';
                 const email = (clientData['EMAIL'] || '').toString().trim() || '';
                 const emailNote = (clientData['EMAIL NOTE'] || '').toString().trim() || 'N/A';
-                const onboardedDateStr = clientData['ONBOARDED DATE'];
+                // Extract date values - handle undefined, null, empty strings consistently (same as AR DATE)
+                const onboardedDateStr = clientData['ONBOARDED DATE'] !== undefined && clientData['ONBOARDED DATE'] !== null && clientData['ONBOARDED DATE'] !== '' 
+                    ? clientData['ONBOARDED DATE'] 
+                    : undefined;
                 const amlCompliant = (clientData['AML COMPLAINT'] || clientData['AML COMPLAINT'] || '').toString().trim().toLowerCase();
                 const wipBalance = parseFloat(clientData['WIP BALANCE'] || clientData['WIP BALANCE'] || '0') || 0;
                 const debtorsBalance = parseFloat(clientData['DEBTORS BALANCE'] || clientData['DEBTORS BALA'] || '0') || 0;
@@ -1456,24 +1648,9 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
                     // Don't error if manager not found, just skip it
                 }
 
-                // Parse dates
-                let onboardedDate: Date | null = null;
-                if (onboardedDateStr) {
-                    const parsedDate = new Date(onboardedDateStr);
-                    if (!isNaN(parsedDate.getTime())) {
-                        onboardedDate = parsedDate;
-                    } else {
-                        onboardedDate = null;
-                    }
-                }
-
-                let arDate = undefined;
-                if (arDateStr) {
-                    const parsedArDate = new Date(arDateStr);
-                    if (!isNaN(parsedArDate.getTime())) {
-                        arDate = parsedArDate;
-                    }
-                }
+                // Parse dates consistently using the same utility function
+                const onboardedDate = parseDateSafely(onboardedDateStr);
+                const arDate = parseDateSafely(arDateStr);
 
                 // Convert boolean fields
                 const auditValue = audit === 'yes' || audit === 'true' || audit === '1';
@@ -1498,18 +1675,33 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
                     emailNote: emailNote || 'N/A',
                     phone: phone || 'N/A',
                     phoneNote: phoneNote || 'N/A',
-                    onboardedDate,
                     amlCompliant: amlCompliantValue,
                     audit: auditValue,
                     clientStatus: finalClientStatus,
                     yearEnd: yearEnd || '',
-                    arDate: arDate || undefined,
                     status: 'active',
                     services: [],
                     jobCategories: [],
                     wipBalance: wipBalance || 0,
                     debtorsBalance: debtorsBalance || 0,
                 };
+                
+                // Only include dates if they're defined (not empty) and not from 1970
+                // Both dates are handled identically to ensure consistent behavior
+                if (onboardedDate !== undefined && onboardedDate !== null) {
+                    // Final validation: reject any 1970 dates (likely from empty/invalid parsing)
+                    const year = onboardedDate.getUTCFullYear();
+                    if (year !== 1970 && year >= 1900 && year <= 2100) {
+                        clientToCreate.onboardedDate = onboardedDate;
+                    }
+                }
+                if (arDate !== undefined && arDate !== null) {
+                    // Final validation: reject any 1970 dates (likely from empty/invalid parsing)
+                    const year = arDate.getUTCFullYear();
+                    if (year !== 1970 && year >= 1900 && year <= 2100) {
+                        clientToCreate.arDate = arDate;
+                    }
+                }
 
                 const createdClient = await ClientModel.create(clientToCreate);
                 importedClients.push({ row: i + 2, clientId: createdClient._id, name: createdClient.name });
