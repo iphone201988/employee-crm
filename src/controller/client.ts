@@ -11,6 +11,8 @@ import { JobModel } from "../models/Job";
 import { ExpensesModel } from "../models/Expenses";
 import { UserModel } from "../models/User";
 import job from "./job";
+import { InvoiceModel } from "../models/Invoice";
+import { InvoiceLogModel } from "../models/InvoiceLog";
 
 
 
@@ -110,6 +112,9 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
         }
 
         // Execute queries in parallel
+        // Reuse the query filters for the breakdown aggregation (shallow copy to avoid mutation)
+        const breakdownMatchQuery = { ...query };
+
         const [clientsDocs, totalClients, breakdown, businessTypes] = await Promise.all([
             ClientModel
                 .find(query)
@@ -126,6 +131,7 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
             ClientModel.countDocuments(query),
 
             ClientModel.aggregate([
+                { $match: breakdownMatchQuery },
                 {
                     $lookup: {
                         from: 'businesscategories',
@@ -557,6 +563,17 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
         limit = parseInt(limit as string);
         const skip = (page - 1) * limit;
         const companyId = req.user.companyId;
+        const parseArrayParam = (value: any): string[] => {
+            if (!value) return [];
+            if (Array.isArray(value)) {
+                return value.map((item) => String(item).trim()).filter(Boolean);
+            }
+            if (typeof value === 'string') {
+                return value.split(',').map(item => item.trim()).filter(Boolean);
+            }
+            return [];
+        };
+        const isValidObjectId = (value: string) => /^[0-9a-fA-F]{24}$/.test(value);
         // Build search query
         const query: any = { status: "active", companyId };
         if (search) {
@@ -565,8 +582,17 @@ const getClientServices = async (req: Request, res: Response, next: NextFunction
                 { clientRef: { $regex: search, $options: 'i' } },
             ];
         }
-        if (businessTypeId) {
-            query.businessTypeId = businessTypeId;
+        const businessTypeIdsParam = parseArrayParam(req.query.businessTypeIds);
+        if (businessTypeId && typeof businessTypeId === 'string' && businessTypeId.trim()) {
+            businessTypeIdsParam.push(businessTypeId as string);
+        }
+        const businessTypeObjectIds = businessTypeIdsParam
+            .filter(isValidObjectId)
+            .map((id) => ObjectId(id));
+        if (businessTypeObjectIds.length === 1) {
+            query.businessTypeId = businessTypeObjectIds[0];
+        } else if (businessTypeObjectIds.length > 1) {
+            query.businessTypeId = { $in: businessTypeObjectIds };
         }
 
         // Get all available job categories
@@ -1389,8 +1415,9 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
             const clientData = clients[i];
             try {
                 // Map Excel columns to client fields
-                const clientRef = (clientData['CLIENT REF.'] || clientData['CLIENT REF'] || '').toString().trim() || 'N/A';
-                const name = (clientData['CLIENT NAME'] || '').toString().trim();
+                const clientRefRaw = (clientData['CLIENT REF.'] || clientData['CLIENT REF'] || '').toString().trim();
+                const clientRef = clientRefRaw || `CLIENT-${Date.now()}-${i}`;
+                const rawName = (clientData['CLIENT NAME'] || '').toString().trim();
                 const clientManagerName = (clientData['CLIENT MANAGER'] || '').toString().trim();
                 const clientStatus = (clientData['CLIENT STATUS'] || 'Current').toString().trim();
                 const businessTypeName = (clientData['BUSINESS TYPE'] || '').toString().trim();
@@ -1409,17 +1436,6 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
                 const amlCompliant = (clientData['AML COMPLAINT'] || clientData['AML COMPLAINT'] || '').toString().trim().toLowerCase();
                 const wipBalance = parseFloat(clientData['WIP BALANCE'] || clientData['WIP BALANCE'] || '0') || 0;
                 const debtorsBalance = parseFloat(clientData['DEBTORS BALANCE'] || clientData['DEBTORS BALA'] || '0') || 0;
-
-                // Validate required fields
-                if (!name) {
-                    errors.push({ row: i + 2, error: `Row ${i + 2}: Client name is required` });
-                    continue;
-                }
-
-                if (!taxNumber) {
-                    errors.push({ row: i + 2, error: `Row ${i + 2}: Tax number is required` });
-                    continue;
-                }
 
                 // Get or create business type
                 let businessTypeId = null;
@@ -1441,11 +1457,13 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
                 }
 
                 // Parse dates
-                let onboardedDate = new Date();
+                let onboardedDate: Date | null = null;
                 if (onboardedDateStr) {
                     const parsedDate = new Date(onboardedDateStr);
                     if (!isNaN(parsedDate.getTime())) {
                         onboardedDate = parsedDate;
+                    } else {
+                        onboardedDate = null;
                     }
                 }
 
@@ -1469,7 +1487,7 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
                 const clientToCreate: any = {
                     companyId,
                     clientRef,
-                    name,
+                    name: rawName || clientRef || `Imported Client ${i + 1}`,
                     businessTypeId,
                     taxNumber,
                     croNumber: croNumber || '',
@@ -1514,4 +1532,230 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
     }
 };
 
-export default { addClient, updateClient, getClients, getClientServices, updateClientService, getClientById, deleteClient, getClientBreakdown, importClients };
+const getClientDebtorsLog = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { clientId } = req.params;
+        if (!clientId) {
+            throw new BadRequestError("Client ID is required");
+        }
+
+        const clientObjectId = ObjectId(clientId);
+        const companyId = req.user.companyId;
+
+        const client = await ClientModel.findOne({ _id: clientObjectId, companyId })
+            .select('name debtorsBalance createdAt')
+            .lean();
+
+        if (!client) {
+            throw new BadRequestError("Client not found");
+        }
+
+        const invoices = await InvoiceModel.find({ clientId: clientObjectId, companyId })
+            .select('_id invoiceNo totalAmount date status jobId scope source createdAt')
+            .sort({ date: 1, createdAt: 1 })
+            .lean();
+
+        const invoiceIds = invoices.map(inv => inv._id);
+        const invoiceLogs = invoiceIds.length > 0
+            ? await InvoiceLogModel.find({ invoiceId: { $in: invoiceIds } })
+                .sort({ date: 1, createdAt: 1 })
+                .lean()
+            : [];
+
+        const jobIds = invoices
+            .map(inv => inv.jobId)
+            .filter((id): id is typeof invoices[0]['jobId'] => Boolean(id));
+
+        const jobs = jobIds.length > 0
+            ? await JobModel.find({ _id: { $in: jobIds } })
+                .select('_id name')
+                .lean()
+            : [];
+
+        const jobNameMap = new Map<string, string>();
+        jobs.forEach(job => jobNameMap.set(job._id.toString(), job.name));
+
+        const logMap = new Map<string, any[]>();
+        invoiceLogs.forEach(log => {
+            const key = log.invoiceId?.toString();
+            if (!key) return;
+            if (!logMap.has(key)) {
+                logMap.set(key, []);
+            }
+            logMap.get(key)?.push(log);
+        });
+
+        const creditActions = new Set(['partialPayment', 'payment', 'compeleted', 'completed', 'writeOff', 'creditNote']);
+        const actionLabelMap: Record<string, string> = {
+            partialPayment: 'Receipt',
+            payment: 'Receipt',
+            compeleted: 'Payment Completed',
+            completed: 'Payment Completed',
+            writeOff: 'Write Off',
+            creditNote: 'Credit Note'
+        };
+
+        const currency = (value: number) => Number((value || 0).toFixed(2));
+        const normalizeDate = (value?: Date | string | null) => {
+            if (!value) return new Date();
+            const dateValue = value instanceof Date ? value : new Date(value);
+            if (isNaN(dateValue.getTime())) {
+                return new Date();
+            }
+            return dateValue;
+        };
+
+        const entries: any[] = [];
+        let runningBalance = 0;
+
+        const pushEntry = (entry: any) => {
+            entries.push({
+                id: `${clientId}-${entries.length + 1}`,
+                ...entry,
+                date: normalizeDate(entry.date).toISOString(),
+                debit: currency(entry.debit),
+                credit: currency(entry.credit),
+                allocated: currency(entry.allocated),
+                outstanding: currency(entry.outstanding),
+                balance: currency(entry.balance),
+            });
+        };
+
+        const openingBalance = currency(Number(client.debtorsBalance || 0));
+        const agingBuckets: Record<string, number> = {
+            current: 0,
+            days30: 0,
+            days60: 0,
+            days90: 0,
+            unallocated: 0,
+        };
+        const addToAging = (amount: number, dateValue?: any | string | null) => {
+            if (amount <= 0) return;
+            const now = new Date();
+            const entryDate = normalizeDate(dateValue);
+            const diffDays = Math.floor((now.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+
+            if (diffDays <= 30) {
+                agingBuckets.current += amount;
+            } else if (diffDays <= 60) {
+                agingBuckets.days30 += amount;
+            } else if (diffDays <= 90) {
+                agingBuckets.days60 += amount;
+            } else {
+                agingBuckets.days90 += amount;
+            }
+        };
+
+        if (openingBalance !== 0) {
+            runningBalance += openingBalance;
+            pushEntry({
+                type: 'Opening Balance',
+                referenceNumber: 'Imported',
+                docNo: '-',
+                jobName: undefined,
+                debit: openingBalance > 0 ? openingBalance : 0,
+                credit: openingBalance < 0 ? Math.abs(openingBalance) : 0,
+                allocated: 0,
+                outstanding: runningBalance,
+                balance: runningBalance,
+                date: client.createdAt || new Date(),
+            });
+            if (openingBalance > 0) {
+                addToAging(openingBalance, client.createdAt);
+            }
+        }
+
+        for (const invoice of invoices) {
+            const invoiceId = invoice?._id?.toString();
+            const invoiceDate = invoice.date || invoice.createdAt || new Date();
+            const invoiceAmount = currency(Number(invoice.totalAmount || 0));
+            let invoiceOutstanding = invoiceAmount;
+
+            runningBalance += invoiceAmount;
+            pushEntry({
+                type: 'Invoice',
+                referenceNumber: invoice.invoiceNo || 'Invoice',
+                docNo: invoice.invoiceNo || 'INV',
+                jobName: invoice.jobId ? jobNameMap.get(invoice.jobId.toString()) : undefined,
+                debit: invoiceAmount,
+                credit: 0,
+                allocated: 0,
+                outstanding: invoiceOutstanding,
+                balance: runningBalance,
+                date: invoiceDate,
+            });
+
+            const logsForInvoice = (logMap.get(invoiceId || '') || []).sort((a, b) => {
+                const aDate = normalizeDate(a.date || a.createdAt).getTime();
+                const bDate = normalizeDate(b.date || b.createdAt).getTime();
+                return aDate - bDate;
+            });
+
+            let creditedAmountForInvoice = 0;       
+
+            for (const log of logsForInvoice) {
+                if (!creditActions.has(log.action)) {
+                    continue;
+                }
+                const creditAmount = currency(Number(log.amount || 0));
+                if (creditAmount <= 0) {
+                    continue;
+                }
+                creditedAmountForInvoice += creditAmount;
+                invoiceOutstanding = Math.max(invoiceOutstanding - creditAmount, 0);
+                runningBalance = Math.max(runningBalance - creditAmount, 0);
+
+                pushEntry({
+                    type: actionLabelMap[log.action] || 'Receipt',
+                    referenceNumber: invoice.invoiceNo || 'Invoice',
+                    docNo: invoice.invoiceNo || 'INV',
+                    jobName: invoice.jobId ? jobNameMap.get(invoice.jobId.toString()) : undefined,
+                    debit: 0,
+                    credit: creditAmount,
+                    allocated: creditAmount,
+                    outstanding: invoiceOutstanding,
+                    balance: runningBalance,
+                    date: log.date || log.createdAt || invoiceDate,
+                });
+            }
+
+            const outstandingAfterCredits = Math.max(invoiceAmount - creditedAmountForInvoice, 0);
+            if (outstandingAfterCredits > 0) {
+                addToAging(outstandingAfterCredits, invoiceDate);
+            }
+        }
+
+        const totalDebit = entries.reduce((sum, entry) => sum + entry.debit, 0);
+        const totalCredit = entries.reduce((sum, entry) => sum + entry.credit, 0);
+        const outstandingBalance = Math.max(runningBalance, 0);
+
+        const summary = {
+            totalDebit: currency(totalDebit),
+            totalCredit: currency(totalCredit),
+            totalOutstanding: currency(outstandingBalance),
+            transactionCount: entries.length,
+        };
+
+        Object.keys(agingBuckets).forEach(key => {
+            agingBuckets[key] = currency(agingBuckets[key]);
+        });
+
+        SUCCESS(res, 200, "Client debtors log fetched successfully", {
+            data: {
+                client: {
+                    id: clientId,
+                    name: client.name,
+                },
+                entries,
+                summary,
+                aging: agingBuckets,
+                openingBalance,
+            }
+        });
+    } catch (error) {
+        console.log("error in getClientDebtorsLog", error);
+        next(error);
+    }
+};
+
+export default { addClient, updateClient, getClients, getClientServices, updateClientService, getClientById, deleteClient, getClientBreakdown, importClients, getClientDebtorsLog };

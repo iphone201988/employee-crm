@@ -59,7 +59,7 @@ export async function sendEmail(to: string, type: number, link: string) {
         const { subject, text, html } = generateEmailBody(type, link);
 
         await transport.sendMail({
-            from: `"Employee Crm" <${process.env.SMTP_EMAIL}>`,
+            from: `"Kollabro Practice Management Software" <${process.env.SMTP_EMAIL}>`,
             to,
             subject,
             text,

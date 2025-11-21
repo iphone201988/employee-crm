@@ -58,7 +58,8 @@ const WriteOffSchema = new Schema({
     invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice', required: true },
     timeLogs: {
         type: [WriteOffTimeLogSchema],
-        required: true,
+        required: false, // Allow empty array when no time logs exist
+        default: [],
     },
     totalWriteOffAmount: {
         type: Number,

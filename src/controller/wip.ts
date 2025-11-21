@@ -621,7 +621,18 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                         },
                         {
                             $addFields: {
-                                wipTotalOpenBalance: { $sum: '$wipopenbalances.amount' }
+                                wipTotalOpenBalance: { $sum: '$wipopenbalances.amount' },
+                                jobTotalWipAmount: {
+                                    $add: [
+                                        { $ifNull: ['$wipAmount', 0] },
+                                        {
+                                            $ifNull: [
+                                                { $sum: '$wipopenbalances.amount' },
+                                                0
+                                            ]
+                                        }
+                                    ]
+                                }
                             }
                         },
                         {
@@ -643,16 +654,22 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                 jobFeePercentage: {
                                     $cond: [
                                         { $gt: ["$jobCost", 0] },
-                                        { $multiply: [{ $divide: ["$wipAmount", "$jobCost"] }, 100] },
+                                        { $multiply: [{ $divide: ["$jobTotalWipAmount", "$jobCost"] }, 100] },
                                         0
                                     ]
                                 },
                                 targetAmount: { $ifNull: ["$jobWipTraget.amount", 0] },
                                 targetMet: {
                                     $cond: [
-                                        { $gt: ["$wipAmount", "$jobWipTraget.amount"] },
-                                        "2",
-                                        "1"
+                                        { $lte: [{ $ifNull: ["$jobWipTraget.amount", 0] }, 0] },
+                                        "0",
+                                        {
+                                            $cond: [
+                                                { $gt: ["$jobTotalWipAmount", { $ifNull: ["$jobWipTraget.amount", 0] }] },
+                                                "2",
+                                                "1"
+                                            ]
+                                        }
                                     ]
                                 },
                             }
@@ -751,18 +768,6 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
 
             // total client WIP amount = sum of job wipAmount + imported wipBalance
             {
-                $addFields: {
-                    clientTotalWipAmount: { 
-                        $add: [
-                            { $sum: '$jobs.wipAmount' },
-                            { $ifNull: ['$wipBalance', 0] }
-                        ]
-                    },
-                    clientTotalWipJobs: { $size: '$jobs' },
-                    importedWipBalance: { $ifNull: ['$wipBalance', 0] }
-                }
-            },
-            {
                 $lookup:
                 {
                     from: 'expenses',
@@ -806,6 +811,18 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                 $addFields:
                     { clientWipTotalOpenBalance: { $sum: '$clientWipOpenBalance.amount' } }
             }, {
+                $addFields: {
+                    importedWipBalance: { $ifNull: ['$wipBalance', 0] },
+                    clientTotalWipJobs: { $size: '$jobs' },
+                    clientTotalWipAmount: {
+                        $add: [
+                            { $sum: '$jobs.jobTotalWipAmount' },
+                            { $ifNull: ['$clientWipTotalOpenBalance', 0] },
+                            { $ifNull: ['$wipBalance', 0] }
+                        ]
+                    }
+                }
+            }, {
                 $lookup:
                 {
                     from: 'wiptragetamounts', localField: 'wipTargetId', foreignField: '_id',
@@ -821,10 +838,65 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                 $addFields: {
                     clientTargetAmount: { $ifNull: ['$clientWipTraget.amount', 0] },
                     clientTargetMet: {
-                        $cond: {
-                            if: { $gt: ['$clientTotalWipAmount', '$clientTargetAmount'] },
-                            then: '2',
-                            else: '1'
+                        $cond: [
+                            { $lte: [{ $ifNull: ['$clientWipTraget.amount', 0] }, 0] },
+                            '0',
+                            {
+                                $cond: [
+                                    { $gt: ['$clientTotalWipAmount', { $ifNull: ['$clientWipTraget.amount', 0] }] },
+                                    '2',
+                                    '1'
+                                ]
+                            }
+                        ]
+                    }
+                }
+            },
+            {
+                $addFields: {
+                    clientTargetMetCombined: {
+                        $let: {
+                            vars: {
+                                jobStatuses: {
+                                    $ifNull: ['$jobs.targetMet', []]
+                                }
+                            },
+                            in: {
+                                $cond: [
+                                    {
+                                        $or: [
+                                            { $eq: ['$clientTargetMet', '2'] },
+                                            { $in: ['2', '$$jobStatuses'] }
+                                        ]
+                                    },
+                                    '2',
+                                    {
+                                        $cond: [
+                                            {
+                                                $or: [
+                                                    { $eq: ['$clientTargetMet', '1'] },
+                                                    {
+                                                        $gt: [
+                                                            {
+                                                                $size: {
+                                                                    $filter: {
+                                                                        input: '$$jobStatuses',
+                                                                        as: 'jobStatus',
+                                                                        cond: { $eq: ['$$jobStatus', '1'] }
+                                                                    }
+                                                                }
+                                                            },
+                                                            0
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            '1',
+                                            '0'
+                                        ]
+                                    }
+                                ]
+                            }
                         }
                     }
                 }
@@ -902,7 +974,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
             ...(targetMetCondition ? [
                 {
                     $match: {
-                        clientTargetMet: targetMetCondition
+                        clientTargetMetCombined: targetMetCondition
                     }
                 }
 
@@ -981,12 +1053,87 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                     $ifNull: [{ $arrayElemAt: ['$jobWip.wipAmount', 0] }, 0]
                                 }
                             }
+                            },
+                            {
+                                $lookup: {
+                                    from: 'wipopenbalances',
+                                    localField: '_id',
+                                    foreignField: 'jobId',
+                                    as: 'wipopenbalances',
+                                    pipeline: [
+                                        { $match: { status: 'notInvoiced' } }
+                                    ]
+                                }
+                            },
+                            {
+                                $addFields: {
+                                    wipTotalOpenBalance: { $sum: '$wipopenbalances.amount' },
+                                    jobTotalWipAmount: {
+                                        $add: [
+                                            { $ifNull: ['$wipAmount', 0] },
+                                            {
+                                                $ifNull: [
+                                                    { $sum: '$wipopenbalances.amount' },
+                                                    0
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                $lookup: {
+                                    from: 'wiptragetamounts',
+                                    localField: 'wipTargetId',
+                                    foreignField: '_id',
+                                    as: 'jobWipTraget'
+                                }
+                            },
+                            {
+                                $unwind: {
+                                    path: '$jobWipTraget',
+                                    preserveNullAndEmptyArrays: true
+                                }
+                            },
+                            {
+                                $addFields: {
+                                    targetAmount: { $ifNull: ['$jobWipTraget.amount', 0] },
+                                    targetMet: {
+                                        $cond: [
+                                            { $lte: [{ $ifNull: ['$jobWipTraget.amount', 0] }, 0] },
+                                            '0',
+                                            {
+                                                $cond: [
+                                                    { $gt: ['$jobTotalWipAmount', { $ifNull: ['$jobWipTraget.amount', 0] }] },
+                                                    '2',
+                                                    '1'
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                }
                         }
                     ],
                     as: 'jobs'
                 }
             },
 
+            {
+                $lookup: {
+                    from: 'wipopenbalances',
+                    localField: '_id',
+                    foreignField: 'clientId',
+                    as: 'clientWipOpenBalance',
+                    pipeline: [
+                        { $match: { status: 'notInvoiced' } }
+                    ]
+                }
+            },
+            {
+                $addFields: {
+                    clientWipTotalOpenBalance: { $sum: '$clientWipOpenBalance.amount' }
+                }
+            },
             {
                 $lookup: {
                     from: 'wiptragetamounts',
@@ -998,30 +1145,76 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
             { $unwind: { path: '$clientWipTraget', preserveNullAndEmptyArrays: true } },
             {
                 $addFields: {
-                    targetMet:
-                    {
-                        $cond: {
-                            if: {
-                                $gt:
-                                    [
-                                        { 
-                                            $add: [
-                                                { $sum: '$jobs.wipAmount' },
-                                                { $ifNull: ['$wipBalance', 0] }
-                                            ]
-                                        }, 
-                                        '$clientWipTraget.amount'
-                                    ]
-                            },
-                            then: '2',
-                            else: '1'
-                        }
-                    },
-                    clientWipAmount: { 
+                    importedWipBalance: { $ifNull: ['$wipBalance', 0] },
+                    clientTotalWipAmount: {
                         $add: [
-                            { $sum: '$jobs.wipAmount' },
+                            { $sum: '$jobs.jobTotalWipAmount' },
+                            { $ifNull: ['$clientWipTotalOpenBalance', 0] },
                             { $ifNull: ['$wipBalance', 0] }
                         ]
+                    },
+                    clientTargetAmount: { $ifNull: ['$clientWipTraget.amount', 0] },
+                    clientTargetMet: {
+                        $cond: [
+                            { $lte: [{ $ifNull: ['$clientWipTraget.amount', 0] }, 0] },
+                            '0',
+                            {
+                                $cond: [
+                                    { $gt: ['$clientTotalWipAmount', { $ifNull: ['$clientWipTraget.amount', 0] }] },
+                                    '2',
+                                    '1'
+                                ]
+                            }
+                        ]
+                    }
+                }
+            },
+            {
+                $addFields: {
+                    clientTargetMetCombined: {
+                        $let: {
+                            vars: {
+                                jobStatuses: {
+                                    $ifNull: ['$jobs.targetMet', []]
+                                }
+                            },
+                            in: {
+                                $cond: [
+                                    {
+                                        $or: [
+                                            { $eq: ['$clientTargetMet', '2'] },
+                                            { $in: ['2', '$$jobStatuses'] }
+                                        ]
+                                    },
+                                    '2',
+                                    {
+                                        $cond: [
+                                            {
+                                                $or: [
+                                                    { $eq: ['$clientTargetMet', '1'] },
+                                                    {
+                                                        $gt: [
+                                                            {
+                                                                $size: {
+                                                                    $filter: {
+                                                                        input: '$$jobStatuses',
+                                                                        as: 'jobStatus',
+                                                                        cond: { $eq: ['$$jobStatus', '1'] }
+                                                                    }
+                                                                }
+                                                            },
+                                                            0
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            '1',
+                                            '0'
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
                     }
                 }
             },
@@ -1030,20 +1223,14 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                     _id: null,
                     totalClients: { $sum: 1 },
                     totalJobs: { $sum: { $size: '$jobs' } },
-                    totalWipAmount: { 
-                        $sum: { 
-                            $add: [
-                                { $sum: '$jobs.wipAmount' },
-                                { $ifNull: ['$wipBalance', 0] }
-                            ]
-                        }
+                    totalWipAmount: {
+                        $sum: '$clientTotalWipAmount'
                     },
-                    // amount those who are target met 2
                     totalInvoicedAmount: {
                         $sum: {
                             $cond: [
-                                { $eq: ['$targetMet', '2'] },
-                                '$clientWipAmount',
+                                { $eq: ['$clientTargetMetCombined', '2'] },
+                                '$clientTotalWipAmount',
                                 0
                             ]
                         }

@@ -57,10 +57,14 @@ const createInvoice = async (req: Request, res: Response, next: NextFunction): P
             date: date || new Date(),
             performedBy: req.userId
         });
-        if (writeOffData && Array.isArray(writeOffData.timeLogs) && writeOffData.timeLogs.length > 0) {
-            const writeOffPayload = {
+        if (writeOffData && writeOffData.writeOffBalance > 0) {
+            const hasTimeLogs = Array.isArray(writeOffData.timeLogs) && writeOffData.timeLogs.length > 0;
+            const writeOffAmount = Number(writeOffData.writeOffBalance || 0);
+            
+            // Create write-off payload (timeLogs can be empty if no time logs exist)
+            const writeOffPayload: any = {
                 invoiceId: newInvoice._id,
-                timeLogs: writeOffData.timeLogs.map((log: any) => ({
+                timeLogs: hasTimeLogs ? writeOffData.timeLogs.map((log: any) => ({
                     timeLogId: ObjectId(log.timeLogId),
                     writeOffAmount: Number(log.writeOffAmount || 0),
                     writeOffPercentage: Number(log.writeOffPercentage || 0),
@@ -70,20 +74,48 @@ const createInvoice = async (req: Request, res: Response, next: NextFunction): P
                     jobId: ObjectId(log.jobId || jobId),
                     userId: ObjectId(log.userId),
                     jobCategoryId: ObjectId(log.jobCategoryId),
-                })),
+                })) : [], // Empty array if no time logs
                 reason: writeOffData.reason || '',
                 logic: writeOffData.logic || 'proportionally',
                 performedBy: req.userId,
                 companyId: req.user.companyId,
+                totalWriteOffAmount: writeOffAmount,
+                totalOriginalAmount: hasTimeLogs 
+                    ? writeOffData.timeLogs.reduce((sum: number, log: any) => sum + Number(log.originalAmount || 0), 0)
+                    : 0,
+                totalDuration: hasTimeLogs
+                    ? writeOffData.timeLogs.reduce((sum: number, log: any) => sum + Number(log.duration || 0), 0)
+                    : 0,
             };
 
             const writeOff = await WriteOffModel.create(writeOffPayload);
-        if (writeOff?.timeLogs?.length) {
-            await TimeLogModel.updateMany(
-                { _id: { $in: writeOff.timeLogs.map((log: any) => log.timeLogId) } },
-                { status: 'writeOff' }
-            );
-        }
+            
+            // Update time logs status if time logs exist
+            if (hasTimeLogs && writeOff?.timeLogs?.length) {
+                await TimeLogModel.updateMany(
+                    { _id: { $in: writeOff.timeLogs.map((log: any) => log.timeLogId) } },
+                    { status: 'writeOff' }
+                );
+            }
+            
+            // If no time logs, reduce client's imported WIP balance
+            if (!hasTimeLogs && clientId) {
+                const clientDoc = await ClientModel.findById(clientId).select('wipBalance');
+                if (clientDoc) {
+                    const currentBalance = Number(clientDoc.wipBalance || 0);
+                    clientDoc.wipBalance = Math.max(0, currentBalance - writeOffAmount);
+                    await clientDoc.save();
+                }
+                
+                // Also update WipOpenBalance entries if they exist
+                if (wipOpenBalanceIds?.length) {
+                    await WipOpenBalanceModel.updateMany(
+                        { _id: { $in: wipOpenBalanceIds.map((id: string) => ObjectId(id)) } },
+                        { status: 'writeOff' }
+                    );
+                }
+            }
+            
             await InvoiceLogModel.create({
                 invoiceId: newInvoice._id,
                 action: 'writeOff',

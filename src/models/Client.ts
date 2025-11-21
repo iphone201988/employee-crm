@@ -99,7 +99,8 @@ const ClientSchema: Schema = new Schema<IClient>(
     },
     onboardedDate: {
       type: Date,
-      required: true,
+      required: false,
+      default: null,
     },
     amlCompliant: {
       type: Boolean,
