@@ -186,7 +186,15 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             const bussiness = await BusinessCategoryModel.find({ companyId }).lean();
             const clients = await ClientModel.find({}, { _id: 1, businessTypeId: 1 }).lean();
             bussiness.forEach((bussiness: any) => {
-                bussiness.count = clients.filter((client: any) => client.businessTypeId.toString() === bussiness._id.toString()).length
+                const bussinessId = bussiness?._id?.toString();
+                bussiness.count = clients.filter((client: any) => {
+                    console.log("client", client?.businessTypeId);
+                    const clientBusinessTypeId = client?.businessTypeId ? client.businessTypeId.toString() : null;
+                    if (!clientBusinessTypeId || !bussinessId) {
+                        return false;
+                    }
+                    return clientBusinessTypeId === bussinessId;
+                }).length;
             })
             SUCCESS(res, 200, "Categories fetched successfully", { data: { bussiness } });
             return;
@@ -223,22 +231,62 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
                 department.count = userDepartments.filter((team: any) => team.departmentId.toString() === department._id.toString()).length
             })
             services.forEach((service: any) => {
-                service.count = clientServices.filter((client: any) => client.services.includes(service._id.toString())).length
+                const serviceId = service?._id?.toString();
+                service.count = clientServices.filter((client: any) => {
+                    if (!Array.isArray(client?.services) || !serviceId) {
+                        return false;
+                    }
+                    return client.services.map((svc: any) => svc?.toString?.()).includes(serviceId);
+                }).length;
             })
             jobs.forEach((job: any) => {
-                job.count = jobList.filter((jobList: any) => jobList.jobTypeId.toString() === job._id.toString()).length
+                const jobId = job?._id?.toString();
+                job.count = jobList.filter((jobList: any) => {
+                    const jobTypeId = jobList?.jobTypeId ? jobList.jobTypeId.toString() : null;
+                    if (!jobTypeId || !jobId) {
+                        return false;
+                    }
+                    return jobTypeId === jobId;
+                }).length;
             })
             times.forEach((time: any) => {
-                time.count = timeEntries.filter((timeEntry: any) => timeEntry.timeCategoryId.toString() === time._id.toString()).length
+                const timeId = time?._id?.toString();
+                time.count = timeEntries.filter((timeEntry: any) => {
+                    const timeCategoryId = timeEntry?.timeCategoryId ? timeEntry.timeCategoryId.toString() : null;
+                    if (!timeCategoryId || !timeId) {
+                        return false;
+                    }
+                    return timeCategoryId === timeId;
+                }).length;
             })
             bussiness.forEach((bussiness: any) => {
-                bussiness.count = clientBussiness.filter((client: any) => client.businessTypeId.toString() === bussiness._id.toString()).length
+                const bussinessId = bussiness?._id?.toString();
+                bussiness.count = clientBussiness.filter((client: any) => {
+                    const clientBusinessTypeId = client?.businessTypeId ? client.businessTypeId.toString() : null;
+                    if (!clientBusinessTypeId || !bussinessId) {
+                        return false;
+                    }
+                    return clientBusinessTypeId === bussinessId;
+                }).length;
             })
 
             wipTargetAmount.forEach((traget: any) => {
+                const targetId = traget?._id?.toString();
                 let count =0;
-                count += jobWipTarget.filter((job: any) => job.wipTargetId.toString() === traget._id.toString()).length
-                count += clientWipTarget.filter((client: any) => client.wipTargetId.toString() === traget._id.toString()).length
+                count += jobWipTarget.filter((job: any) => {
+                    const jobTargetId = job?.wipTargetId ? job.wipTargetId.toString() : null;
+                    if (!jobTargetId || !targetId) {
+                        return false;
+                    }
+                    return jobTargetId === targetId;
+                }).length
+                count += clientWipTarget.filter((client: any) => {
+                    const clientTargetId = client?.wipTargetId ? client.wipTargetId.toString() : null;
+                    if (!clientTargetId || !targetId) {
+                        return false;
+                    }
+                    return clientTargetId === targetId;
+                }).length
                 traget.count = count
             })
            
