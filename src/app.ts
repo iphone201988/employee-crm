@@ -62,19 +62,19 @@ const startServer = async () => {
   try {
 
     try {
-      // console.log(fs.readFileSync("/etc/letsencrypt/live/app1.kollabro.com/privkey.pem"),)
-      // console.log(fs.readFileSync("/etc/letsencrypt/live/app1.kollabro.com/fullchain.pem"),)
+        console.log(fs.readFileSync("/etc/letsencrypt/live/app1.kollabro.com/privkey.pem"),"privkey.pem")
+        console.log(fs.readFileSync("/etc/letsencrypt/live/app1.kollabro.com/fullchain.pem"),"fullchain.pem")
     } catch (error) {
       console.log("error here reading file", error)
     }
-    // const options = {
-    //   key: fs.readFileSync('/etc/letsencrypt/live/app1.kollabro.com/privkey.pem'),
-    //   cert: fs.readFileSync('/etc/letsencrypt/live/app1.kollabro.com/fullchain.pem'),
-    // };
+    const options = {
+      key: fs.readFileSync('/etc/letsencrypt/live/app1.kollabro.com/privkey.pem'),
+      cert: fs.readFileSync('/etc/letsencrypt/live/app1.kollabro.com/fullchain.pem'),
+    };
     // Connect to database
     await connectDatabase();
-    const httpsServer = http.createServer(app);
-    // const httpsServer = https.createServer(options, app)
+    // const httpsServer = http.createServer(app);
+    const httpsServer = https.createServer(options, app)
     httpsServer.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT} in ${config.env} mode`);
     });
