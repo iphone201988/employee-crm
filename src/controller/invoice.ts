@@ -163,6 +163,14 @@ const createInvoice = async (req: Request, res: Response, next: NextFunction): P
         next(error);
     }
 };
+const generateInvoiceFromWip = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        req.body.source = req.body.source || 'system';
+        return await createInvoice(req, res, next);
+    } catch (error) {
+        next(error);
+    }
+};
 const getInvoices = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         let { page = 1, limit = 10, clientId, status, startDate,
@@ -804,6 +812,7 @@ const getInvoiceByInvoiceNo = async (req: Request, res: Response, next: NextFunc
 
 export default {
     createInvoice,
+    generateInvoiceFromWip,
     getInvoices,
     createInvoiceLog,
     invoiceStatusChange,

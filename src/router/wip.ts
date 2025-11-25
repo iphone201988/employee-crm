@@ -16,6 +16,7 @@ wipRouter.post("/attach-wip-target", authenticate, wipController.attachWipTarget
 
 //invoice routes
 wipRouter.post("/invoice", authenticate, validate(wipValidation.createInvoiceValidation), invoiceController.createInvoice);
+wipRouter.post("/invoice/generate", authenticate, validate(wipValidation.createInvoiceValidation), invoiceController.generateInvoiceFromWip);
 wipRouter.get("/invoices", authenticate, invoiceController.getInvoices);
 wipRouter.post("/invoice/log", authenticate, validate(wipValidation.createInvoiceLogValidation), invoiceController.createInvoiceLog);
 wipRouter.patch("/invoice/status-change", authenticate, validate(wipValidation.updateInvoiceStatusValidation), invoiceController.invoiceStatusChange);
