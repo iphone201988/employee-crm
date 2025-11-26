@@ -26,6 +26,8 @@ interface GetJobsQuery {
     status?: string;
     priority?: string;
     jobManagerId?: string;
+    jobManagerIds?: string;
+    teamMemberIds?: string;
     clientId?: string;
     search?: string;
     clientSearch?: string;
@@ -33,6 +35,7 @@ interface GetJobsQuery {
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
     view?: 'daily' | 'weekly' | 'monthly' | 'yearly';
+    periodOffset?: string;
 }
 
 const getJobs = async (
@@ -47,13 +50,32 @@ const getJobs = async (
             status = "",
             priority = "",
             jobManagerId = "",
+            jobManagerIds = "",
+            teamMemberIds = "",
             clientId = "",
             search = "",
             jobTypeId = "",
             sortBy = "createdAt",
             sortOrder = "desc",
-            view = "yearly"
+            view = "yearly",
+            periodOffset = "0"
         } = req.query;
+
+        const parseObjectIdList = (ids: string) => {
+            if (!ids) return [];
+            return ids.split(',')
+                .map(id => id.trim())
+                .filter(Boolean)
+                .map(id => {
+                    try {
+                        return ObjectId(id);
+                    } catch (error) {
+                        console.warn("Invalid ObjectId provided to getJobs:", id);
+                        return null;
+                    }
+                })
+                .filter(Boolean);
+        };
 
         const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
@@ -69,11 +91,23 @@ const getJobs = async (
             query.priority = priority;
         }
 
-        if (jobManagerId) {
-            query.jobManagerId = jobManagerId;
+        const managerIdsList = jobManagerIds ? parseObjectIdList(jobManagerIds) : [];
+        if (managerIdsList.length > 0) {
+            query.jobManagerId = managerIdsList.length === 1 ? managerIdsList[0] : { $in: managerIdsList };
+        } else if (jobManagerId) {
+            try {
+                query.jobManagerId = ObjectId(jobManagerId);
+            } catch (error) {
+                console.warn("Invalid jobManagerId provided to getJobs:", jobManagerId);
+            }
         }
 
-        const statusBuckets = ["queued", "inProgress", "forApproval", "completed"];
+        const teamMemberIdsList = teamMemberIds ? parseObjectIdList(teamMemberIds) : [];
+        if (teamMemberIdsList.length > 0) {
+            query.teamMembers = teamMemberIdsList.length === 1 ? teamMemberIdsList[0] : { $in: teamMemberIdsList };
+        }
+
+        const statusBuckets = ["queued", "awaitingRecords", "inProgress", "withClient", "forApproval", "completed"];
 
         let clientFilterIds: any[] | null = null;
         if (clientId) {
@@ -141,22 +175,55 @@ const getJobs = async (
 
         // Date filtering based on view
         const now = new Date();
-        if (view !== "yearly") {
-            const startDate = new Date();
-            switch (view) {
-                case 'daily':
-                    startDate.setHours(0, 0, 0, 0);
-                    query.createdAt = { $gte: startDate };
-                    break;
-                case 'weekly':
-                    startDate.setDate(now.getDate() - 7);
-                    query.createdAt = { $gte: startDate };
-                    break;
-                case 'monthly':
-                    startDate.setMonth(now.getMonth() - 1);
-                    query.createdAt = { $gte: startDate };
-                    break;
-            }
+        const offsetNumber = parseInt(periodOffset as string, 10);
+        const normalizedOffset = Number.isNaN(offsetNumber) ? 0 : offsetNumber;
+        const referenceDate = new Date(now);
+
+        if (view === 'daily') {
+            referenceDate.setDate(referenceDate.getDate() + normalizedOffset);
+        } else if (view === 'weekly') {
+            referenceDate.setDate(referenceDate.getDate() + (normalizedOffset * 7));
+        } else if (view === 'monthly') {
+            referenceDate.setMonth(referenceDate.getMonth() + normalizedOffset);
+        } else if (view === 'yearly') {
+            referenceDate.setFullYear(referenceDate.getFullYear() + normalizedOffset);
+        }
+
+        const dateFilter: any = {};
+        if (view === 'daily') {
+            const startOfDay = new Date(referenceDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(referenceDate);
+            endOfDay.setHours(23, 59, 59, 999);
+            dateFilter.$gte = startOfDay;
+            dateFilter.$lte = endOfDay;
+        } else if (view === 'weekly') {
+            const startOfWeek = new Date(referenceDate);
+            startOfWeek.setDate(referenceDate.getDate() - referenceDate.getDay() + 1);
+            startOfWeek.setHours(0, 0, 0, 0);
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 6);
+            endOfWeek.setHours(23, 59, 59, 999);
+            dateFilter.$gte = startOfWeek;
+            dateFilter.$lte = endOfWeek;
+        } else if (view === 'monthly') {
+            const startOfMonth = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+            const endOfMonth = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0);
+            startOfMonth.setHours(0, 0, 0, 0);
+            endOfMonth.setHours(23, 59, 59, 999);
+            dateFilter.$gte = startOfMonth;
+            dateFilter.$lte = endOfMonth;
+        } else if (view === 'yearly') {
+            const startOfYear = new Date(referenceDate.getFullYear(), 0, 1);
+            const endOfYear = new Date(referenceDate.getFullYear(), 11, 31);
+            startOfYear.setHours(0, 0, 0, 0);
+            endOfYear.setHours(23, 59, 59, 999);
+            dateFilter.$gte = startOfYear;
+            dateFilter.$lte = endOfYear;
+        }
+
+        if (Object.keys(dateFilter).length > 0) {
+            query.createdAt = dateFilter;
         }
 
         const baseQuery = { ...query };
@@ -464,6 +531,7 @@ const getJobs = async (
 
         const jobIds = jobs.map((job: any) => job._id);
         let jobWipMap = new Map<string, number>();
+        let jobHoursMap = new Map<string, number>();
         if (jobIds.length > 0) {
             const wipMatch: any = {
                 jobId: { $in: jobIds },
@@ -484,14 +552,38 @@ const getJobs = async (
             jobWipMap = new Map(
                 wipAggregation.map(item => [item._id.toString(), parseFloat(item.wipBalance.toFixed(2))])
             );
+
+            const hoursMatch: any = {
+                jobId: { $in: jobIds },
+            };
+            if (req.user.role !== "superAdmin") {
+                hoursMatch.companyId = req.user.companyId;
+            }
+            const hoursAggregation = await TimeLogModel.aggregate([
+                { $match: hoursMatch },
+                {
+                    $group: {
+                        _id: '$jobId',
+                        totalDuration: { $sum: '$duration' }
+                    }
+                }
+            ]);
+            jobHoursMap = new Map(
+                hoursAggregation.map(item => {
+                    const hours = (item.totalDuration || 0) / 3600;
+                    return [item._id.toString(), parseFloat(hours.toFixed(2))];
+                })
+            );
         }
 
         const jobsWithWip = jobs.map((job: any) => {
             const jobObj = job.toObject ? job.toObject() : job;
             const wipBalance = jobWipMap.get(job._id.toString()) || 0;
+            const hoursLogged = jobHoursMap.get(job._id.toString()) || 0;
             return {
                 ...jobObj,
-                wipBalance: parseFloat(wipBalance.toFixed(2))
+                wipBalance: parseFloat(wipBalance.toFixed(2)),
+                hoursLogged
             };
         });
 
@@ -543,8 +635,13 @@ const getJobById = async (req: Request, res: Response, next: NextFunction): Prom
             .populate('jobManagerId', 'name email department')
             .populate('teamMembers', 'name email department')
             .populate('createdBy', 'name email');
+        const logsMatch: any = { jobId: ObjectId(jobId) };
+        if (req.user.role !== "superAdmin") {
+            logsMatch.companyId = req.user.companyId;
+        }
+
         const timeLogs = await TimeLogModel.aggregate([
-            { $match: { jobId: ObjectId(jobId) } },
+            { $match: logsMatch },
             {
                 $lookup: {
                     from: 'users',
@@ -554,7 +651,24 @@ const getJobById = async (req: Request, res: Response, next: NextFunction): Prom
                     pipeline: [{ $project: { _id: 1, name: 1, avatarUrl: 1 } }]
                 }
             },
-            { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } }
+            { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    _id: 1,
+                    date: 1,
+                    description: 1,
+                    durationSeconds: { $ifNull: ['$duration', 0] },
+                    rate: { $ifNull: ['$rate', 0] },
+                    amount: { $ifNull: ['$amount', 0] },
+                    billable: { $ifNull: ['$billable', false] },
+                    user: {
+                        _id: '$user._id',
+                        name: '$user.name',
+                        avatarUrl: '$user.avatarUrl'
+                    }
+                }
+            },
+            { $sort: { date: -1, createdAt: -1 } }
         ]);
         SUCCESS(res, 200, "Job fetched successfully", { data: job, timeLogs });
     } catch (error) {

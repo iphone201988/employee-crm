@@ -11,7 +11,6 @@ export class CastError extends Error {
 
 export class ValidationError extends Error {
     statusCode: number;
-
     constructor(message: string) {
         super(message);
         this.name = "ValidationError";

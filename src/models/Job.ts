@@ -10,7 +10,7 @@ export interface IJob extends Document {
     endDate: Date;
     jobCost: number;
     teamMembers: mongoose.Types.ObjectId[];
-    status: 'queued' | 'inProgress' | 'withClient' | 'forApproval' | 'completed' | 'cancelled';
+    status: 'queued' | 'awaitingRecords' | 'inProgress' | 'withClient' | 'forApproval' | 'completed';
     description: string;
     createdBy: mongoose.Types.ObjectId;
     priority: 'high' | 'medium' | 'low' | 'urgent';
@@ -64,7 +64,7 @@ const JobSchema: Schema = new Schema<IJob>(
         }],
         status: {
             type: String,
-            enum: ['queued', 'inProgress', 'withClient', 'forApproval', 'completed', 'cancelled'],
+            enum: ['queued', 'awaitingRecords', 'inProgress', 'withClient', 'forApproval', 'completed'],
             default: 'queued',
             required: true,
         },

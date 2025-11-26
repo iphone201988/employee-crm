@@ -439,6 +439,7 @@ const getAllTimesheets = async (req: Request, res: Response, next: NextFunction)
                     break;
                 case 'Auto Approved':
                     summary.autoApproved += item.count;
+                    break;
                 case 'Not Submitted':
                     summary.draft = item.count;
                     break;

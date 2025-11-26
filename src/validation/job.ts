@@ -6,9 +6,8 @@ const createJobValidation = {
             "string.base": "name must be a string",
             "any.required": "Name is required",
         }),
-        description: Joi.string().required().messages({
+        description: Joi.string().allow('').optional().messages({
             "string.base": "Description must be a string",
-            "any.required": "Description is required",
         }),
         clientId: Joi.string().required().messages({
             "string.base": "Client ID must be a string",
@@ -30,15 +29,17 @@ const createJobValidation = {
             "date.base": "End date must be a date",
             "any.required": "End date is required",
         }),
-        jobCost: Joi.number().required().messages({
-            "number.base": "Job cost must be a number",
-            "any.required": "Job cost is required",
+        jobCost: Joi.number().min(0).required().messages({
+            "number.base": "Job fee must be a number",
+            "number.min": "Job fee must be 0 or greater",
+            "any.required": "Job fee is required",
         }),
-        teamMembers: Joi.array().items(Joi.string()).required().messages({
+        teamMembers: Joi.array().items(Joi.string()).min(1).required().messages({
             "array.base": "Team members must be an array",
+            "array.min": "At least one team member is required",
             "any.required": "Team members are required",
         }),
-        status: Joi.string().valid('queued', 'inProgress', 'withClient', 'forApproval', 'completed', 'cancelled').required().messages({
+        status: Joi.string().valid('queued', 'awaitingRecords', 'inProgress', 'withClient', 'forApproval', 'completed').required().messages({
             "string.base": "Status must be a string",
             "any.required": "Status is required",
         }),
@@ -58,7 +59,7 @@ const updateJobValidation = {
     }),
     body: Joi.object({
         name: Joi.string().optional(),
-        description: Joi.string().optional(),
+        description: Joi.string().allow('', null).optional(),
         clientId: Joi.string().optional(),
         jobTypeId: Joi.string().optional(),
         jobManagerId: Joi.string().optional(),
@@ -66,7 +67,7 @@ const updateJobValidation = {
         endDate: Joi.date().optional(),
         jobCost: Joi.number().optional(),
         teamMembers: Joi.array().items(Joi.string()).optional(),
-        status: Joi.string().valid('queued', 'inProgress', 'withClient', 'forApproval', 'completed', 'cancelled').optional(),
+        status: Joi.string().valid('queued', 'awaitingRecords', 'inProgress', 'withClient', 'forApproval', 'completed').optional(),
         priority: Joi.string().valid('high', 'medium', 'low', 'urgent').optional(),
     }),
 };
