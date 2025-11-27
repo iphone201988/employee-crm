@@ -59,6 +59,7 @@ app.use(errorHandler);
 const PORT = config.port || 3000;
 
 const startServer = async () => {
+
   try {
 
     try {

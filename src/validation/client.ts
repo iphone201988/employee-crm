@@ -38,15 +38,11 @@ const addClientValidation = {
         emailNote: Joi.string().optional().messages({
             "string.base": "Email note must be a string",
         }),
-        phone: Joi.string().required().messages({
+        phone: Joi.string().optional().allow('', null).messages({
             "string.base": "Phone must be a string",
-            "any.required": "Phone is required",
         }),
         phoneNote: Joi.string().optional().allow("",null).messages({
             "string.base": "Phone note must be a string",
-        }),
-        onboardedDate: Joi.date().optional().allow(null).messages({
-            "date.base": "Onboarded date must be a date",
         }),
         amlCompliant: Joi.boolean().optional().messages({
             "boolean.base": "AML compliant must be a boolean",

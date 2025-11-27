@@ -90,8 +90,8 @@ const ClientSchema: Schema = new Schema<IClient>(
     },
     phone: {
       type: String,
-      required: true,
       trim: true,
+      default: '',
     },
     phoneNote: {
       type: String,
