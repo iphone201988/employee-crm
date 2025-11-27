@@ -1628,6 +1628,9 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
                 const amlCompliant = (clientData['AML COMPLAINT'] || clientData['AML COMPLAINT'] || '').toString().trim().toLowerCase();
                 const wipBalance = parseFloat(clientData['WIP BALANCE'] || clientData['WIP BALANCE'] || '0') || 0;
                 const debtorsBalance = parseFloat(clientData['DEBTORS BALANCE'] || clientData['DEBTORS BALA'] || '0') || 0;
+                const importedWipDateStr = clientData['WIP DATE'] !== undefined && clientData['WIP DATE'] !== null && clientData['WIP DATE'] !== ''
+                    ? clientData['WIP DATE']
+                    : undefined;
 
                 // Get or create business type
                 let businessTypeId = null;
@@ -1700,6 +1703,16 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
                     const year = arDate.getUTCFullYear();
                     if (year !== 1970 && year >= 1900 && year <= 2100) {
                         clientToCreate.arDate = arDate;
+                    }
+                }
+
+                if (wipBalance) {
+                    const importedWipDate = parseDateSafely(importedWipDateStr) || new Date();
+                    const year = importedWipDate.getUTCFullYear();
+                    if (year !== 1970 && year >= 1900 && year <= 2100) {
+                        clientToCreate.importedWipDate = importedWipDate;
+                    } else {
+                        clientToCreate.importedWipDate = new Date();
                     }
                 }
 

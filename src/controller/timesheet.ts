@@ -38,6 +38,11 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                 timeEntry.companyId = timesheet?.companyId || companyId;
                 const job = await JobModel.findById(timeEntry.jobId);
                 const timeEntrieId = timeEntry?._id;
+                
+                // Extract jobTypeId from logs if present (use first log's jobTypeId as entry-level jobTypeId)
+                const logs = timeEntry?.logs || [];
+                const jobTypeIdFromLogs = logs.length > 0 && logs[0].jobTypeId ? logs[0].jobTypeId : undefined;
+                
                 // Use proper filter for upsert
                 delete timeEntry._id;
                 let data: any;
@@ -68,7 +73,6 @@ const addTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
                     );
                 }
 
-                const logs = timeEntry?.logs || [];
                 let totalHours = 0;
                 let totalAmount = 0;
                 const rate = timeEntry?.rate || 0;
@@ -503,6 +507,65 @@ const getTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
         const clientIds = jobs.map((job: any) => job.clientId);
         const clients = await ClientModel.find({ _id: { $in: clientIds }, status: "active" }, { _id: 1, name: 1, clientRef: 1 }).lean();
 
+        // Get user's job type rates (jobFees array)
+        const userJobFees = user?.jobFees || [];
+        const jobFeesMap = new Map();
+        userJobFees.forEach((fee: any) => {
+            if (fee.jobId) {
+                jobFeesMap.set(fee.jobId.toString(), fee.fee || 0);
+            }
+        });
+
+        // Enrich jobCategories with rates for this user
+        const jobCategoriesWithRates = jobCategories.map((category: any) => ({
+            _id: category._id,
+            name: category.name,
+            rate: jobFeesMap.get(category._id.toString()) ?? null // null means no rate set, use default billableRate
+        }));
+
+        // Enrich time entries with jobTypeId from their logs or TimeLogs
+        if (timesheet?.timeEntries && timesheet.timeEntries.length > 0) {
+            const timeEntryIds = timesheet.timeEntries.map((entry: any) => entry._id);
+            
+            // First, try to get jobTypeId from TimeEntry logs (for draft timesheets)
+            timesheet.timeEntries = timesheet.timeEntries.map((entry: any) => {
+                // Check if jobTypeId is in logs array (for draft timesheets)
+                const logs = entry.logs || [];
+                const jobTypeIdFromLogs = logs.length > 0 && logs[0].jobTypeId ? logs[0].jobTypeId.toString() : undefined;
+                
+                return {
+                    ...entry,
+                    jobTypeId: jobTypeIdFromLogs || entry.jobTypeId || undefined
+                };
+            });
+            
+            // Also check TimeLogs (for submitted/approved timesheets)
+            const timeLogs = await TimeLogModel.find(
+                { timeEntrieId: { $in: timeEntryIds } },
+                { timeEntrieId: 1, jobTypeId: 1 }
+            ).lean();
+            
+            // Create a map of timeEntryId -> jobTypeId (from first log)
+            const timeEntryJobTypeMap = new Map();
+            timeLogs.forEach((log: any) => {
+                if (log.timeEntrieId && log.jobTypeId && !timeEntryJobTypeMap.has(log.timeEntrieId.toString())) {
+                    timeEntryJobTypeMap.set(log.timeEntrieId.toString(), log.jobTypeId.toString());
+                }
+            });
+
+            // Enrich each time entry with jobTypeId from TimeLogs if not already set
+            timesheet.timeEntries = timesheet.timeEntries.map((entry: any) => {
+                if (!entry.jobTypeId) {
+                    const jobTypeId = timeEntryJobTypeMap.get(entry._id.toString());
+                    return {
+                        ...entry,
+                        jobTypeId: jobTypeId || undefined
+                    };
+                }
+                return entry;
+            });
+        }
+
         const workSchedule: any = user?.workSchedule || {};
         const weeklyCapacity = {
             mon: workSchedule?.monday ?? 0,
@@ -517,7 +580,7 @@ const getTimesheet = async (req: Request, res: Response, next: NextFunction): Pr
         SUCCESS(res, 200, "Timesheet fetched successfully",
             {
                 data: timesheet,
-                dropdoenOptionals: { clients, jobs, jobCategories, timeCategories },
+                dropdoenOptionals: { clients, jobs, jobCategories: jobCategoriesWithRates, timeCategories },
                 rate: user?.billableRate,
                 name: user?.name,
                 avatarUrl: user?.avatarUrl,
@@ -950,13 +1013,16 @@ async function logSaved(timesheet: any) {
             const logs = timeEntry.logs || [];
             for (const log of logs) {
                 const job = await JobModel.findById(timeEntry.jobId);
+                // Use jobTypeId from log if available (from logs array), otherwise fallback to job's jobTypeId
+                const logJobTypeId = (log as any).jobTypeId;
+                const jobTypeId = logJobTypeId || job?.jobTypeId;
                 const addedLog = {
                     userId: timeEntry?.userId,
                     timeEntrieId: timeEntry._id,
                     companyId: timeEntry?.companyId,
                     clientId: timeEntry.clientId,
                     jobId: timeEntry.jobId,
-                    jobTypeId: job?.jobTypeId,
+                    jobTypeId: jobTypeId,
                     timeCategoryId: timeEntry.timeCategoryId,
                     date: log.date,
                     description: timeEntry.description,

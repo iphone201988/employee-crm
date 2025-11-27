@@ -25,6 +25,7 @@ export interface IClient extends Document {
   jobCategories: Schema.Types.ObjectId[];
   wipTargetId: Schema.Types.ObjectId;
   wipBalance?: number;
+  importedWipDate?: Date | null;
   debtorsBalance?: number;
   createdAt: Date;
   updatedAt: Date;
@@ -146,6 +147,10 @@ const ClientSchema: Schema = new Schema<IClient>(
     wipBalance: {
       type: Number,
       default: 0,
+    },
+    importedWipDate: {
+      type: Date,
+      default: null,
     },
     debtorsBalance: {
       type: Number,

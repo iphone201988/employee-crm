@@ -495,8 +495,12 @@ function calculateWIPSummary(wipData: any[]) {
 const createOpenWipBalance = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     const companyId = req.user.companyId;
     try {
-        const { clientId, amount, jobId, type } = req.body;
-        const openBalance = await WipOpenBalanceModel.create({ clientId, amount, jobId, type, companyId });
+        const { clientId, amount, jobId, type, date } = req.body;
+        const openBalancePayload: any = { clientId, amount, jobId, type, companyId };
+        if (date) {
+            openBalancePayload.createdAt = new Date(date);
+        }
+        const openBalance = await WipOpenBalanceModel.create(openBalancePayload);
         SUCCESS(res, 200, "Open balance created successfully", { data: openBalance });
 
     } catch (error) {
@@ -813,6 +817,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
             }, {
                 $addFields: {
                     importedWipBalance: { $ifNull: ['$wipBalance', 0] },
+                    importedWipDate: { $ifNull: ['$importedWipDate', null] },
                     clientTotalWipJobs: { $size: '$jobs' },
                     clientTotalWipAmount: {
                         $add: [
@@ -1146,6 +1151,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
             {
                 $addFields: {
                     importedWipBalance: { $ifNull: ['$wipBalance', 0] },
+                    importedWipDate: { $ifNull: ['$importedWipDate', null] },
                     clientTotalWipAmount: {
                         $add: [
                             { $sum: '$jobs.jobTotalWipAmount' },
@@ -1268,15 +1274,17 @@ const wipBalance = async (req: Request, res: Response) => {
         }: any = req.query;
 
         const companyId = req.user.companyId;
+        const companyObjectId = new mongoose.Types.ObjectId(companyId);
+        const clientObjectId = clientId ? new mongoose.Types.ObjectId(clientId) : undefined;
         const currentDate = new Date();
 
         const matchConditions: any = {
-            companyId: companyId,
+            companyId: companyObjectId,
             billable: true,
         };
 
-        if (clientId) {
-            matchConditions.clientId = new mongoose.Types.ObjectId(clientId);
+        if (clientObjectId) {
+            matchConditions.clientId = clientObjectId;
         }
 
         if (startDate) {
@@ -1295,8 +1303,79 @@ const wipBalance = async (req: Request, res: Response) => {
         const skipCount = (pageNumber - 1) * pageSize;
 
         // Construct aggregation pipeline
+        const openBalanceMatch: any = {
+            companyId: companyObjectId,
+            status: 'notInvoiced',
+        };
+        if (clientObjectId) {
+            openBalanceMatch.clientId = clientObjectId;
+        }
+        if (startDate || endDate) {
+            openBalanceMatch.createdAt = {};
+            if (startDate) openBalanceMatch.createdAt.$gte = new Date(startDate);
+            if (endDate) openBalanceMatch.createdAt.$lte = new Date(endDate);
+        }
+
+        const importedMatch: any = {
+            companyId: companyObjectId
+        };
+        if (clientObjectId) {
+            importedMatch._id = clientObjectId;
+        }
+
+        const combinedMatchStage: any = { companyId: companyObjectId };
+        if (startDate || endDate) {
+            combinedMatchStage.date = {};
+            if (startDate) combinedMatchStage.date.$gte = new Date(startDate);
+            if (endDate) combinedMatchStage.date.$lte = new Date(endDate);
+        }
+
         const pipeline: any[] = [
             { $match: matchConditions },
+            {
+                $project: {
+                    clientId: 1,
+                    amount: '$amount',
+                    date: '$date',
+                    companyId: '$companyId',
+                    source: { $literal: 'timeLog' }
+                }
+            },
+            {
+                $unionWith: {
+                    coll: 'wipopenbalances',
+                    pipeline: [
+                        { $match: openBalanceMatch },
+                        {
+                            $project: {
+                                clientId: '$clientId',
+                                amount: '$amount',
+                                date: '$createdAt',
+                                companyId: '$companyId',
+                                source: { $literal: 'openBalance' }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $unionWith: {
+                    coll: 'clients',
+                    pipeline: [
+                        { $match: importedMatch },
+                        {
+                            $project: {
+                                clientId: '$_id',
+                                amount: '$wipBalance',
+                                date: { $ifNull: ['$importedWipDate', '$createdAt'] },
+                                companyId: '$companyId',
+                                source: { $literal: 'imported' }
+                            }
+                        }
+                    ]
+                }
+            },
+            { $match: combinedMatchStage },
             {
                 $addFields: {
                     daysOld: {

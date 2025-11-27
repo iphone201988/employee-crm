@@ -44,7 +44,12 @@ const TimeEntry = new mongoose.Schema({
     },
     logs: [{
         date: Date,
-        duration: Number
+        duration: Number,
+        jobTypeId: {
+            type: Schema.Types.ObjectId,
+            ref: 'JobCategory',
+            required: false
+        }
     }],
     totalHours: { type: Number, default: 0 },
     totalAmount: { type: Number, default: 0 },

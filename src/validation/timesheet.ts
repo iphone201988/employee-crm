@@ -48,6 +48,12 @@ const addTimesheetValidation = {
                         'any.required': 'jobId is required'
                     }),
 
+                jobTypeId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional()
+                    .allow('', null)
+                    .messages({
+                        'string.pattern': 'jobTypeId must be a valid MongoDB ObjectId'
+                    }),
+
                 timeCategoryId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required()
                     .messages({
                         'string.pattern': 'timeCategoryId must be a valid MongoDB ObjectId',
@@ -102,6 +108,12 @@ const addTimesheetValidation = {
                                 'number.min': 'duration must be at least 1 minute',
                                 'number.max': 'duration cannot exceed 86400 seconds (24 hours)',
                                 'any.required': 'duration is required'
+                            }),
+
+                        jobTypeId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional()
+                            .allow('', null)
+                            .messages({
+                                'string.pattern': 'jobTypeId must be a valid MongoDB ObjectId'
                             })
                     })
                 ).min(1).required()
