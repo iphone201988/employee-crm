@@ -23,6 +23,15 @@ import { InvoiceLogModel } from "../models/InvoiceLog";
  * - ISO date strings (for manual creation)
  * Returns UTC date at midnight to ensure date doesn't change
  */
+const normalizeExcelValue = (value: any): any => {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed === '' ? undefined : trimmed;
+    }
+    return value;
+};
+
 const parseDateSafely = (dateValue: any): Date | undefined => {
     // Handle null, undefined, empty values, and 0 (which Excel might return for empty cells)
     // Also handle falsy values and empty strings/whitespace
@@ -105,27 +114,57 @@ const parseDateSafely = (dateValue: any): Date | undefined => {
         return undefined;
     }
 
-    // Try DD/MM/YYYY format first (for Excel imports as strings)
-    const ddmmyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    // Try DD/MM/YYYY or MM/DD/YYYY first (supports /, -, . separators)
+    const ddmmyyyyMatch = dateStr.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
     if (ddmmyyyyMatch) {
-        const day = parseInt(ddmmyyyyMatch[1], 10);
-        const month = parseInt(ddmmyyyyMatch[2], 10) - 1; // Month is 0-indexed
-        const year = parseInt(ddmmyyyyMatch[3], 10);
-        
-        // Validate day and month ranges
-        if (day < 1 || day > 31 || month < 0 || month > 11) {
-            return undefined;
+        const firstPart = parseInt(ddmmyyyyMatch[1], 10);
+        const secondPart = parseInt(ddmmyyyyMatch[2], 10);
+        let year = parseInt(ddmmyyyyMatch[3], 10);
+        if (year < 100) {
+            year += year >= 70 ? 1900 : 2000;
         }
-        
-        // Create UTC date at midnight to avoid timezone shifts
-        const parsedDate = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
-        
-        // Validate the date (check if it's a valid date and matches input)
-        if (!isNaN(parsedDate.getTime()) && 
-            parsedDate.getUTCDate() === day && 
-            parsedDate.getUTCMonth() === month && 
-            parsedDate.getUTCFullYear() === year) {
-            return parsedDate;
+
+        const tryBuildDate = (day: number, monthIndex: number) => {
+            if (day < 1 || day > 31 || monthIndex < 0 || monthIndex > 11) {
+                return undefined;
+            }
+            const parsedDate = new Date(Date.UTC(year, monthIndex, day, 0, 0, 0, 0));
+            if (!isNaN(parsedDate.getTime()) &&
+                parsedDate.getUTCDate() === day &&
+                parsedDate.getUTCMonth() === monthIndex &&
+                parsedDate.getUTCFullYear() === year) {
+                return parsedDate;
+            }
+            return undefined;
+        };
+
+        // Prefer DD/MM interpretation when valid
+        const ddmmCandidate = tryBuildDate(firstPart, secondPart - 1);
+        if (ddmmCandidate) {
+            return ddmmCandidate;
+        }
+
+        // Fall back to MM/DD interpretation when applicable
+        const mmddCandidate = tryBuildDate(secondPart, firstPart - 1);
+        if (mmddCandidate) {
+            return mmddCandidate;
+        }
+    }
+
+    // Try YYYY-MM-DD format (supports /, -, . separators)
+    const yyyymmddMatch = dateStr.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+    if (yyyymmddMatch) {
+        const year = parseInt(yyyymmddMatch[1], 10);
+        const month = parseInt(yyyymmddMatch[2], 10) - 1;
+        const day = parseInt(yyyymmddMatch[3], 10);
+        if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+            const parsedDate = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+            if (!isNaN(parsedDate.getTime()) &&
+                parsedDate.getUTCDate() === day &&
+                parsedDate.getUTCMonth() === month &&
+                parsedDate.getUTCFullYear() === year) {
+                return parsedDate;
+            }
         }
     }
 
@@ -698,6 +737,47 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
                         { $sort: { createdAt: -1 } }
                     ],
                     as: 'notes'
+                }
+            },
+            // Explicitly project all fields including WIP and debtors fields
+            {
+                $project: {
+                    _id: 1,
+                    companyId: 1,
+                    clientRef: 1,
+                    name: 1,
+                    businessTypeId: 1,
+                    taxNumber: 1,
+                    croNumber: 1,
+                    croLink: 1,
+                    clientManagerId: 1,
+                    clientManagerData: 1,
+                    address: 1,
+                    email: 1,
+                    emailNote: 1,
+                    phone: 1,
+                    phoneNote: 1,
+                    onboardedDate: 1,
+                    amlCompliant: 1,
+                    audit: 1,
+                    clientStatus: 1,
+                    yearEnd: 1,
+                    arDate: 1,
+                    status: 1,
+                    services: 1,
+                    jobCategories: 1,
+                    wipTargetId: 1,
+                    wipBalance: 1,
+                    importedWipDate: 1,
+                    debtorsBalance: 1,
+                    debtorsDate: 1,
+                    createdAt: 1,
+                    updatedAt: 1,
+                    timeLogs: 1,
+                    jobs: 1,
+                    expenses: 1,
+                    writeOffLogs: 1,
+                    notes: 1
                 }
             }
 
@@ -1613,24 +1693,22 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
                 const croNumber = (clientData['CRO NO.'] || clientData['CRO NO'] || '').toString().trim() || '';
                 const croLink = (clientData['CRO LINK'] || '').toString().trim() || '';
                 // Extract date values - handle undefined, null, empty strings consistently
-                const arDateStr = clientData['AR DATE'] !== undefined && clientData['AR DATE'] !== null && clientData['AR DATE'] !== '' 
-                    ? clientData['AR DATE'] 
-                    : undefined;
+                const arDateInput = normalizeExcelValue(clientData['AR DATE']);
                 const address = (clientData['ADDRESS'] || '').toString().trim() || 'N/A';
                 const phone = (clientData['PHONE'] || '').toString().trim() || 'N/A';
                 const phoneNote = (clientData['PHONE NOTE'] || '').toString().trim() || 'N/A';
                 const email = (clientData['EMAIL'] || '').toString().trim() || '';
                 const emailNote = (clientData['EMAIL NOTE'] || '').toString().trim() || 'N/A';
-                // Extract date values - handle undefined, null, empty strings consistently (same as AR DATE)
-                const onboardedDateStr = clientData['ONBOARDED DATE'] !== undefined && clientData['ONBOARDED DATE'] !== null && clientData['ONBOARDED DATE'] !== '' 
-                    ? clientData['ONBOARDED DATE'] 
-                    : undefined;
+                const onboardedDateInput = normalizeExcelValue(
+                    clientData['ONBOARDED DATE'] ??
+                    clientData['ONBOARDING DATE'] ??
+                    clientData['ONBOARD DATE']
+                );
                 const amlCompliant = (clientData['AML COMPLAINT'] || clientData['AML COMPLAINT'] || '').toString().trim().toLowerCase();
                 const wipBalance = parseFloat(clientData['WIP BALANCE'] || clientData['WIP BALANCE'] || '0') || 0;
                 const debtorsBalance = parseFloat(clientData['DEBTORS BALANCE'] || clientData['DEBTORS BALA'] || '0') || 0;
-                const importedWipDateStr = clientData['WIP DATE'] !== undefined && clientData['WIP DATE'] !== null && clientData['WIP DATE'] !== ''
-                    ? clientData['WIP DATE']
-                    : undefined;
+                const importedWipDateInput = normalizeExcelValue(clientData['WIP DATE']);
+                const debtorsDateInput = normalizeExcelValue(clientData['DEBTORS DATE']);
 
                 // Get or create business type
                 let businessTypeId = null;
@@ -1652,8 +1730,9 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
                 }
 
                 // Parse dates consistently using the same utility function
-                const onboardedDate = parseDateSafely(onboardedDateStr);
-                const arDate = parseDateSafely(arDateStr);
+                const onboardedDate = parseDateSafely(onboardedDateInput);
+                const arDate = parseDateSafely(arDateInput);
+                const debtorsDate = parseDateSafely(debtorsDateInput);
 
                 // Convert boolean fields
                 const auditValue = audit === 'yes' || audit === 'true' || audit === '1';
@@ -1706,14 +1785,37 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
                     }
                 }
 
+                // Handle WIP DATE - use provided date or default to current date if WIP balance exists
                 if (wipBalance) {
-                    const importedWipDate = parseDateSafely(importedWipDateStr) || new Date();
-                    const year = importedWipDate.getUTCFullYear();
-                    if (year !== 1970 && year >= 1900 && year <= 2100) {
-                        clientToCreate.importedWipDate = importedWipDate;
+                    const importedWipDate = parseDateSafely(importedWipDateInput);
+                    if (importedWipDate) {
+                        const year = importedWipDate.getUTCFullYear();
+                        if (year !== 1970 && year >= 1900 && year <= 2100) {
+                            clientToCreate.importedWipDate = importedWipDate;
+                        } else {
+                            // If parsed date is invalid, use current date
+                            clientToCreate.importedWipDate = new Date();
+                        }
                     } else {
+                        // If no WIP DATE provided, use current date as default
                         clientToCreate.importedWipDate = new Date();
                     }
+                }
+
+                // Handle DEBTORS DATE - persist imported date when provided, otherwise fall back when balance exists
+                if (debtorsDateInput !== undefined && debtorsDateInput !== null && debtorsDateInput !== '') {
+                    if (debtorsDate) {
+                        const year = debtorsDate.getUTCFullYear();
+                        if (year !== 1970 && year >= 1900 && year <= 2100) {
+                            clientToCreate.debtorsDate = debtorsDate;
+                        } else if (debtorsBalance) {
+                            clientToCreate.debtorsDate = new Date();
+                        }
+                    } else if (debtorsBalance) {
+                        clientToCreate.debtorsDate = new Date();
+                    }
+                } else if (debtorsBalance) {
+                    clientToCreate.debtorsDate = new Date();
                 }
 
                 const createdClient = await ClientModel.create(clientToCreate);
@@ -1748,7 +1850,7 @@ const getClientDebtorsLog = async (req: Request, res: Response, next: NextFuncti
         const companyId = req.user.companyId;
 
         const client = await ClientModel.findOne({ _id: clientObjectId, companyId })
-            .select('name debtorsBalance createdAt')
+            .select('name debtorsBalance debtorsDate createdAt')
             .lean();
 
         if (!client) {
@@ -1853,6 +1955,8 @@ const getClientDebtorsLog = async (req: Request, res: Response, next: NextFuncti
 
         if (openingBalance !== 0) {
             runningBalance += openingBalance;
+            // Use debtorsDate if available, otherwise fall back to createdAt
+            const openingBalanceDate = client.debtorsDate || client.createdAt || new Date();
             pushEntry({
                 type: 'Opening Balance',
                 referenceNumber: 'Imported',
@@ -1863,10 +1967,10 @@ const getClientDebtorsLog = async (req: Request, res: Response, next: NextFuncti
                 allocated: 0,
                 outstanding: runningBalance,
                 balance: runningBalance,
-                date: client.createdAt || new Date(),
+                date: openingBalanceDate,
             });
             if (openingBalance > 0) {
-                addToAging(openingBalance, client.createdAt);
+                addToAging(openingBalance, openingBalanceDate);
             }
         }
 

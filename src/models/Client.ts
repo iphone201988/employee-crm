@@ -27,6 +27,7 @@ export interface IClient extends Document {
   wipBalance?: number;
   importedWipDate?: Date | null;
   debtorsBalance?: number;
+  debtorsDate?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 
@@ -155,6 +156,10 @@ const ClientSchema: Schema = new Schema<IClient>(
     debtorsBalance: {
       type: Number,
       default: 0,
+    },
+    debtorsDate: {
+      type: Date,
+      default: null,
     }
   },
   {
