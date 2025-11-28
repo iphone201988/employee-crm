@@ -792,7 +792,32 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                     ]
                                 }
                             }
-                        },], as: 'expensesData'
+                        },
+                        {
+                            $lookup: {
+                                from: 'users',
+                                localField: 'submittedBy',
+                                foreignField: '_id',
+                                as: 'submittedDetails',
+                                pipeline: [{ $project: { name: 1, _id: 1, avatarUrl: 1 } }],
+                            }
+                        },
+                        {
+                            $unwind: { path: '$submittedDetails', preserveNullAndEmptyArrays: true }
+                        },
+                        {
+                            $lookup: {
+                                from: 'users',
+                                localField: 'userId',
+                                foreignField: '_id',
+                                as: 'user',
+                                pipeline: [{ $project: { name: 1, _id: 1, avatarUrl: 1 } }],
+                            }
+                        },
+                        {
+                            $unwind: { path: '$user', preserveNullAndEmptyArrays: true }
+                        },
+                    ], as: 'expensesData'
                 }
             }, {
                 $addFields:

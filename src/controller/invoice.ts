@@ -163,6 +163,119 @@ const createInvoice = async (req: Request, res: Response, next: NextFunction): P
         next(error);
     }
 };
+
+const deleteInvoice = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { invoiceId } = req.params;
+        if (!invoiceId) {
+            throw new BadRequestError("Invoice id is required");
+        }
+
+        const invoice = await InvoiceModel.findOne({
+            _id: ObjectId(invoiceId),
+            companyId: req.user.companyId
+        }).lean();
+
+        if (!invoice) {
+            throw new BadRequestError("Invoice not found");
+        }
+
+        const timeLogIds = (Array.isArray(invoice.timeLogIds) ? invoice.timeLogIds : []) as any[];
+        const expenseIds = (Array.isArray(invoice.expenseIds) ? invoice.expenseIds : []) as any[];
+        const wipOpenBalanceIds = (Array.isArray(invoice.wipOpenBalanceIds) ? invoice.wipOpenBalanceIds : []) as any[];
+
+        const updates: Promise<any>[] = [];
+
+        if (timeLogIds.length) {
+            updates.push(
+                TimeLogModel.updateMany(
+                    { _id: { $in: timeLogIds } },
+                    { status: 'notInvoiced' }
+                )
+            );
+        }
+
+        if (expenseIds.length) {
+            updates.push(
+                ExpensesModel.updateMany(
+                    { _id: { $in: expenseIds } },
+                    { status: 'no' }
+                )
+            );
+        }
+
+        if (wipOpenBalanceIds.length) {
+            updates.push(
+                WipOpenBalanceModel.updateMany(
+                    { _id: { $in: wipOpenBalanceIds } },
+                    { status: 'notInvoiced' }
+                )
+            );
+        }
+
+        const writeOffs = await WriteOffModel.find({ invoiceId: invoice._id }).lean();
+        if (writeOffs.length) {
+            const writeOffLogIds = writeOffs.flatMap((writeOff: any) =>
+                (writeOff.timeLogs || []).map((log: any) => log.timeLogId)
+            );
+            if (writeOffLogIds.length) {
+                updates.push(
+                    TimeLogModel.updateMany(
+                        { _id: { $in: writeOffLogIds } },
+                        { status: 'notInvoiced' }
+                    )
+                );
+            }
+            await WriteOffModel.deleteMany({ invoiceId: invoice._id });
+        }
+
+        await Promise.all(updates);
+        await InvoiceLogModel.deleteMany({ invoiceId: invoice._id });
+
+        let importedPortion = Number(invoice.netAmount || 0);
+
+        if (timeLogIds.length) {
+            const timeLogObjectIds = timeLogIds.map((id: any) => ObjectId(id));
+            const timeLogTotals = await TimeLogModel.aggregate([
+                { $match: { _id: { $in: timeLogObjectIds } } },
+                { $group: { _id: null, total: { $sum: '$amount' } } }
+            ]);
+            importedPortion -= Number(timeLogTotals[0]?.total || 0);
+        }
+
+        if (wipOpenBalanceIds.length) {
+            const wipOpenBalanceObjectIds = wipOpenBalanceIds.map((id: any) => ObjectId(id));
+            const openBalanceTotals = await WipOpenBalanceModel.aggregate([
+                { $match: { _id: { $in: wipOpenBalanceObjectIds } } },
+                { $group: { _id: null, total: { $sum: '$amount' } } }
+            ]);
+            importedPortion -= Number(openBalanceTotals[0]?.total || 0);
+        }
+
+        if (expenseIds.length) {
+            const expenseObjectIds = expenseIds.map((id: any) => ObjectId(id));
+            const expenseTotals = await ExpensesModel.aggregate([
+                { $match: { _id: { $in: expenseObjectIds } } },
+                { $group: { _id: null, total: { $sum: '$netAmount' } } }
+            ]);
+            importedPortion -= Number(expenseTotals[0]?.total || 0);
+        }
+
+        if (invoice.clientId && importedPortion > 0) {
+            await ClientModel.findOneAndUpdate(
+                { _id: invoice.clientId },
+                { $inc: { wipBalance: importedPortion } }
+            );
+        }
+
+        await InvoiceModel.deleteOne({ _id: invoice._id });
+
+        SUCCESS(res, 200, "Invoice deleted successfully", { data: { invoiceId } });
+    } catch (error) {
+        console.log("error in deleteInvoice", error);
+        next(error);
+    }
+};
 const generateInvoiceFromWip = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         req.body.source = req.body.source || 'system';
@@ -510,34 +623,85 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
         const pageSize = parseInt(limit, 10);
         const skipCount = (pageNumber - 1) * pageSize;
 
-        // Build match conditions - only invoices with outstanding balance
-        const matchConditions: any = {
+        // Build match conditions for invoices - only invoices with outstanding balance
+        const invoiceMatchConditions: any = {
             companyId: ObjectId(companyId),
             $expr: { $gt: [{ $subtract: ['$totalAmount', '$paidAmount'] }, 0] }, // Only unpaid/partially paid
         };
 
         if (clientId) {
-            matchConditions.clientId = ObjectId(clientId);
+            invoiceMatchConditions.clientId = ObjectId(clientId);
         }
 
         if (startDate || endDate) {
-            matchConditions.date = {};
+            invoiceMatchConditions.date = {};
             if (startDate) {
-                matchConditions.date.$gte = new Date(startDate);
+                invoiceMatchConditions.date.$gte = new Date(startDate);
             }
             if (endDate) {
-                matchConditions.date.$lte = new Date(endDate);
+                invoiceMatchConditions.date.$lte = new Date(endDate);
             }
         }
 
-        // Aggregation pipeline for aged debtors with pagination
+        // Build match conditions for imported debtors (clients with debtorsBalance)
+        const importedDebtorsMatch: any = {
+            companyId: ObjectId(companyId),
+            debtorsBalance: { $gt: 0 }, // Only clients with imported debtors balance
+        };
+
+        if (clientId) {
+            importedDebtorsMatch._id = ObjectId(clientId);
+        }
+
+        // Combined match for filtering (used after union)
+        const combinedMatchStage: any = { companyId: ObjectId(companyId) };
+        if (clientId) {
+            combinedMatchStage.clientId = ObjectId(clientId);
+        }
+
+        // Aggregation pipeline combining invoices and imported debtors
         const pipeline = [
-            { $match: matchConditions },
+            // Start with invoices
+            { $match: invoiceMatchConditions },
             {
                 $addFields: {
-                    // Calculate outstanding balance
                     balance: { $subtract: ['$totalAmount', '$paidAmount'] },
-                    // Calculate days since invoice date
+                    date: '$date',
+                    source: { $literal: 'invoice' },
+                },
+            },
+            {
+                $project: {
+                    clientId: '$clientId',
+                    balance: 1,
+                    date: 1,
+                    source: 1,
+                    companyId: 1,
+                },
+            },
+            // Union with imported debtors from clients
+            {
+                $unionWith: {
+                    coll: 'clients',
+                    pipeline: [
+                        { $match: importedDebtorsMatch },
+                        {
+                            $project: {
+                                clientId: '$_id',
+                                balance: '$debtorsBalance',
+                                date: { $ifNull: ['$debtorsDate', '$createdAt'] },
+                                source: { $literal: 'imported' },
+                                companyId: '$companyId',
+                            },
+                        },
+                    ],
+                },
+            },
+            // Apply combined match if needed
+            { $match: combinedMatchStage },
+            // Calculate days old for aging
+            {
+                $addFields: {
                     daysOld: {
                         $floor: {
                             $divide: [
@@ -548,13 +712,12 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
                     },
                 },
             },
+            // Group by client and calculate aging buckets
             {
                 $group: {
                     _id: '$clientId',
-                    clientRef: { $first: '$clientId' },
                     totalBalance: { $sum: '$balance' },
-
-                    // Aging buckets based on invoice date
+                    // Aging buckets based on date
                     days30: {
                         $sum: {
                             $cond: [{ $lte: ['$daysOld', 30] }, '$balance', 0],
@@ -637,6 +800,7 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
                     },
                 },
             },
+            // Lookup client info
             {
                 $lookup: {
                     from: 'clients',
@@ -651,6 +815,7 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
                     preserveNullAndEmptyArrays: true,
                 },
             },
+            // Project final fields
             {
                 $project: {
                     _id: 0,
@@ -681,14 +846,9 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
 
         const agedDebtorsData = await InvoiceModel.aggregate(paginatedPipeline);
 
-        // Get total count for pagination
+        // Get total count for pagination (count unique clients)
         const countPipeline = [
-            { $match: matchConditions },
-            {
-                $group: {
-                    _id: '$clientId',
-                },
-            },
+            ...pipeline,
             {
                 $count: 'totalClients',
             },
@@ -812,6 +972,7 @@ const getInvoiceByInvoiceNo = async (req: Request, res: Response, next: NextFunc
 
 export default {
     createInvoice,
+    deleteInvoice,
     generateInvoiceFromWip,
     getInvoices,
     createInvoiceLog,

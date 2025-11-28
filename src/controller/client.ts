@@ -290,6 +290,7 @@ const getClients = async (req: Request, res: Response, next: NextFunction): Prom
             query.$or = [
                 { name: { $regex: search, $options: 'i' } },
                 { clientRef: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
             ];
         }
 

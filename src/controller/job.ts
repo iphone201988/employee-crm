@@ -248,7 +248,7 @@ const getJobs = async (
                     .populate('clientId', 'name email')
                     .populate('jobTypeId', 'name description')
                     .populate('jobManagerId', 'name email department')
-                    .populate('teamMembers', 'name email department')
+                    .populate('teamMembers', 'name email department avatarUrl')
                     .populate('createdBy', 'name email'),
 
                 JobModel.countDocuments(query),
