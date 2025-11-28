@@ -660,7 +660,7 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
         }
 
         // Aggregation pipeline combining invoices and imported debtors
-        const pipeline = [
+        const pipeline: any[] = [
             // Start with invoices
             { $match: invoiceMatchConditions },
             {
@@ -847,7 +847,7 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
         const agedDebtorsData = await InvoiceModel.aggregate(paginatedPipeline);
 
         // Get total count for pagination (count unique clients)
-        const countPipeline = [
+        const countPipeline: any[] = [
             ...pipeline,
             {
                 $count: 'totalClients',
