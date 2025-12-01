@@ -8,6 +8,12 @@ const clientRouter = express.Router();
 
 clientRouter.post("/add", authenticate, validate(clientValidation.addClientValidation), clientController.addClient);
 clientRouter.put("/update/:clientId", authenticate, validate(clientValidation.updateClientValidation), clientController.updateClient);
+clientRouter.patch(
+    "/:clientId/aging-dates",
+    authenticate,
+    validate(clientValidation.updateClientAgingDatesValidation),
+    clientController.updateClientAgingDates
+);
 clientRouter.get("/all", authenticate, clientController.getClients);
 clientRouter.get("/services", authenticate, clientController.getClientServices);
 clientRouter.put("/update-client-services", authenticate, validate(clientValidation.updateClientServiceValidation), clientController.updateClientService);

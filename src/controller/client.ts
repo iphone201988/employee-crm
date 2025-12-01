@@ -231,6 +231,7 @@ const addClient = async (req: Request, res: Response, next: NextFunction): Promi
         next(error);
     }
 };
+
 const updateClient = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const { clientId } = req.params;
@@ -262,7 +263,39 @@ const updateClient = async (req: Request, res: Response, next: NextFunction): Pr
         console.log("error in updateClient", error);
         next(error);
     }
-}
+};
+
+const updateClientAgingDates = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { clientId } = req.params;
+        const { importedWipDate, debtorsDate } = req.body as {
+            importedWipDate?: string;
+            debtorsDate?: string;
+        };
+
+        const update: any = {};
+
+        if (importedWipDate !== undefined) {
+            const parsed = parseDateSafely(importedWipDate);
+            update.importedWipDate = parsed ?? null;
+        }
+
+        if (debtorsDate !== undefined) {
+            const parsed = parseDateSafely(debtorsDate);
+            update.debtorsDate = parsed ?? null;
+        }
+
+        if (Object.keys(update).length === 0) {
+            return SUCCESS(res, 200, "Nothing to update", { data: {} });
+        }
+
+        await ClientModel.findByIdAndUpdate(clientId, update, { new: true });
+        SUCCESS(res, 200, "Client aging dates updated successfully", { data: {} });
+    } catch (error) {
+        console.log("error in updateClientAgingDates", error);
+        next(error);
+    }
+};
 const getClients = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         let { page = 1, limit = 10, search = "", businessTypeId = "", } = req.query;
@@ -2068,4 +2101,16 @@ const getClientDebtorsLog = async (req: Request, res: Response, next: NextFuncti
     }
 };
 
-export default { addClient, updateClient, getClients, getClientServices, updateClientService, getClientById, deleteClient, getClientBreakdown, importClients, getClientDebtorsLog };
+export default {
+    addClient,
+    updateClient,
+    updateClientAgingDates,
+    getClients,
+    getClientServices,
+    updateClientService,
+    getClientById,
+    deleteClient,
+    getClientBreakdown,
+    importClients,
+    getClientDebtorsLog,
+};

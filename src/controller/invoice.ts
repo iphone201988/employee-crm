@@ -798,6 +798,11 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
                             $cond: [{ $gt: ['$daysOld', 180] }, '$balance', 0],
                         },
                     },
+                    hasImportedDebtors: {
+                        $max: {
+                            $cond: [{ $eq: ['$source', 'imported'] }, 1, 0],
+                        },
+                    },
                 },
             },
             // Lookup client info
@@ -830,6 +835,7 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
                     days150: { $round: ['$days150', 2] },
                     days180: { $round: ['$days180', 2] },
                     days180Plus: { $round: ['$days180Plus', 2] },
+                    hasImportedDebtors: { $eq: ['$hasImportedDebtors', 1] },
                 },
             },
             {

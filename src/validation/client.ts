@@ -167,4 +167,24 @@ const getClientByIdValidation = {
     }),
 };
 
-export default {addClientValidation, updateClientValidation, updateClientServiceValidation, getClientByIdValidation};
+const updateClientAgingDatesValidation = {
+    params: Joi.object({
+        clientId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required().messages({
+            "string.base": "Client ID must be a string",
+            "any.required": "Client ID is required",
+            "string.pattern.base": "Client ID is not valid",
+        }),
+    }),
+    body: Joi.object({
+        importedWipDate: Joi.alternatives().try(Joi.date(), Joi.string()).optional().allow(null, ''),
+        debtorsDate: Joi.alternatives().try(Joi.date(), Joi.string()).optional().allow(null, ''),
+    }),
+};
+
+export default {
+    addClientValidation,
+    updateClientValidation,
+    updateClientServiceValidation,
+    getClientByIdValidation,
+    updateClientAgingDatesValidation,
+};

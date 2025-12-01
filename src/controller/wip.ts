@@ -1483,6 +1483,11 @@ const wipBalance = async (req: Request, res: Response) => {
                     days180Plus: {
                         $sum: { $cond: [{ $gt: ['$daysOld', 180] }, '$amount', 0] },
                     },
+                    hasImportedWip: {
+                        $max: {
+                            $cond: [{ $eq: ['$source', 'imported'] }, 1, 0],
+                        },
+                    },
                 },
             },
             {
@@ -1499,6 +1504,7 @@ const wipBalance = async (req: Request, res: Response) => {
                     days150: { $round: ['$days150', 2] },
                     days180: { $round: ['$days180', 2] },
                     days180Plus: { $round: ['$days180Plus', 2] },
+                    hasImportedWip: { $eq: ['$hasImportedWip', 1] },
                 },
             },
             { $sort: { clientRef: 1 } },
