@@ -19,6 +19,7 @@ clientRouter.get("/services", authenticate, clientController.getClientServices);
 clientRouter.put("/update-client-services", authenticate, validate(clientValidation.updateClientServiceValidation), clientController.updateClientService);
 clientRouter.get("/breakdown", authenticate, clientController.getClientBreakdown);
 clientRouter.get("/:clientId/debtors-log", authenticate, validate(clientValidation.getClientByIdValidation), clientController.getClientDebtorsLog);
+clientRouter.post("/:clientId/debtors-open-balance", authenticate, validate(clientValidation.createDebtorsOpenBalanceValidation), clientController.createDebtorsOpenBalance);
 clientRouter.post("/import", authenticate, clientController.importClients);
 clientRouter.get("/:clientId", authenticate, validate(clientValidation.getClientByIdValidation), clientController.getClientById);
 clientRouter.delete("/:clientId", authenticate, validate(clientValidation.getClientByIdValidation), clientController.deleteClient);

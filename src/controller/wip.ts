@@ -1431,6 +1431,7 @@ const wipBalance = async (req: Request, res: Response) => {
                     _id: '$clientId',
                     clientRef: { $first: '$clientInfo.clientRef' },
                     clientName: { $first: '$clientInfo.name' },
+                    isImported: { $first: '$clientInfo.isImported' },
                     wipBalance: { $sum: '$amount' },
                     days30: {
                         $sum: { $cond: [{ $lte: ['$daysOld', 30] }, '$amount', 0] },
@@ -1496,6 +1497,7 @@ const wipBalance = async (req: Request, res: Response) => {
                     clientId: '$_id',
                     clientRef: 1,
                     clientName: 1,
+                    isImported: { $ifNull: ['$isImported', false] },
                     wipBalance: { $round: ['$wipBalance', 2] },
                     days30: { $round: ['$days30', 2] },
                     days60: { $round: ['$days60', 2] },

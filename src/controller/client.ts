@@ -13,6 +13,8 @@ import { UserModel } from "../models/User";
 import job from "./job";
 import { InvoiceModel } from "../models/Invoice";
 import { InvoiceLogModel } from "../models/InvoiceLog";
+import { WriteOffModel } from "../models/WriteOff";
+import { DebtorsOpenBalanceModel } from "../models/debtorsOpenBalance";
 
 /**
  * Parse date consistently to avoid timezone shifts
@@ -268,9 +270,11 @@ const updateClient = async (req: Request, res: Response, next: NextFunction): Pr
 const updateClientAgingDates = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const { clientId } = req.params;
-        const { importedWipDate, debtorsDate } = req.body as {
+        const { importedWipDate, debtorsDate, wipBalance, debtorsBalance } = req.body as {
             importedWipDate?: string;
             debtorsDate?: string;
+            wipBalance?: number;
+            debtorsBalance?: number;
         };
 
         const update: any = {};
@@ -285,12 +289,20 @@ const updateClientAgingDates = async (req: Request, res: Response, next: NextFun
             update.debtorsDate = parsed ?? null;
         }
 
+        if (wipBalance !== undefined) {
+            update.wipBalance = typeof wipBalance === 'number' ? wipBalance : parseFloat(String(wipBalance)) || 0;
+        }
+
+        if (debtorsBalance !== undefined) {
+            update.debtorsBalance = typeof debtorsBalance === 'number' ? debtorsBalance : parseFloat(String(debtorsBalance)) || 0;
+        }
+
         if (Object.keys(update).length === 0) {
             return SUCCESS(res, 200, "Nothing to update", { data: {} });
         }
 
         await ClientModel.findByIdAndUpdate(clientId, update, { new: true });
-        SUCCESS(res, 200, "Client aging dates updated successfully", { data: {} });
+        SUCCESS(res, 200, "Client aging dates and balances updated successfully", { data: {} });
     } catch (error) {
         console.log("error in updateClientAgingDates", error);
         next(error);
@@ -671,16 +683,36 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
                                 $expr: { $eq: ['$companyId', '$$companyId'] }
                             }
                         },
-                        { $unwind: '$timeLogs' },
+                        // Use preserveNullAndEmptyArrays to include write-offs with empty timeLogs
+                        { $unwind: { path: '$timeLogs', preserveNullAndEmptyArrays: true } },
                         {
                             $match: {
-                                $expr: { $eq: ['$timeLogs.clientId', '$$clientId'] }
+                                $expr: {
+                                    $or: [
+                                        // Match write-offs with time logs
+                                        { $eq: ['$timeLogs.clientId', '$$clientId'] },
+                                        // Match write-offs without time logs (null after unwind) using top-level clientId
+                                        {
+                                            $and: [
+                                                { $eq: ['$timeLogs', null] }, // timeLogs is null after unwinding empty array
+                                                { $eq: ['$clientId', '$$clientId'] } // Match top-level clientId
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        // Add fields to handle write-offs without time logs
+                        {
+                            $addFields: {
+                                effectiveJobId: { $ifNull: ['$timeLogs.jobId', '$jobId'] },
+                                effectiveWriteOffAmount: { $ifNull: ['$timeLogs.writeOffAmount', '$totalWriteOffAmount'] },
                             }
                         },
                         {
                             $lookup: {
                                 from: 'jobs',
-                                localField: 'timeLogs.jobId',
+                                localField: 'effectiveJobId',
                                 foreignField: '_id',
                                 as: 'jobDetails',
                                 pipeline: [{ $project: { _id: 1, name: 1 } }]
@@ -702,12 +734,19 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
                             $group: {
                                 _id: {
                                     writeOffId: '$_id',
-                                    jobId: '$timeLogs.jobId'
+                                    jobId: '$effectiveJobId'
                                 },
                                 writeOffId: { $first: '$_id' },
-                                jobId: { $first: '$timeLogs.jobId' },
-                                jobName: { $first: '$jobDetails.name' },
-                                writeOffAmount: { $sum: '$timeLogs.writeOffAmount' },
+                                jobId: { $first: '$effectiveJobId' },
+                                jobName: { 
+                                    $first: { 
+                                        $ifNull: [
+                                            '$jobDetails.name', 
+                                            'Open Balance / Imported WIP' // Default name for write-offs without jobs
+                                        ] 
+                                    } 
+                                },
+                                writeOffAmount: { $sum: '$effectiveWriteOffAmount' },
                                 createdAt: { $first: '$createdAt' },
                                 reason: { $first: '$reason' },
                                 logic: { $first: '$logic' },
@@ -717,7 +756,7 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
                         // Then group by jobId to aggregate occasions and amounts
                         {
                             $group: {
-                                _id: '$jobId',
+                                _id: { $ifNull: ['$jobId', 'no-job'] }, // Use 'no-job' as placeholder for null jobId
                                 jobId: { $first: '$jobId' },
                                 jobName: { $first: '$jobName' },
                                 writeOffOccasions: { $sum: 1 },
@@ -832,12 +871,94 @@ const getClientById = async (req: Request, res: Response, next: NextFunction): P
             managerId = String(client.clientManagerId);
         }
 
-        const normalizedClient = {
+        const normalizedClient: any = {
             ...client,
             clientManagerId: managerId || '',
             clientManager: managerName,
         };
         delete (normalizedClient as any).clientManagerData;
+
+        /**
+         * Include write-offs created for invoices WITHOUT any time logs
+         * ----------------------------------------------------------------
+         * The aggregation lookup above only considers write-offs that have
+         * timeLogs (it unwinds the timeLogs array). To ensure that write-offs
+         * created directly against imported/open balances (no time logs)
+         * are also visible in the Client Details write-off tab, we fetch
+         * those here and merge them into the existing writeOffLogs array.
+         */
+        if (client?._id) {
+            try {
+                const extraWriteOffs = await WriteOffModel.find({
+                    companyId: req.user.companyId,
+                    clientId: client._id,
+                    $or: [
+                        { timeLogs: { $exists: false } },
+                        { timeLogs: { $size: 0 } },
+                    ],
+                })
+                    .populate({ path: 'jobId', select: 'name' })
+                    .populate({ path: 'performedBy', select: 'name' })
+                    .lean();
+
+                if (Array.isArray(extraWriteOffs) && extraWriteOffs.length > 0) {
+                    const existingLogs: any[] = Array.isArray(normalizedClient.writeOffLogs)
+                        ? normalizedClient.writeOffLogs
+                        : [];
+
+                    const groupedExtra = new Map<string, any>();
+
+                    for (const wo of extraWriteOffs) {
+                        const job: any = (wo as any).jobId || null;
+                        const jobIdStr = job?._id ? String(job._id) : 'no-job';
+                        const jobName =
+                            job?.name || 'Open Balance / Imported WIP';
+
+                        let entry = groupedExtra.get(jobIdStr);
+                        if (!entry) {
+                            entry = {
+                                _id: jobIdStr,
+                                jobId: job?._id || null,
+                                jobName,
+                                writeOffOccasions: 0,
+                                totalWriteOffAmount: 0,
+                                occasionDetails: [] as any[],
+                            };
+                            groupedExtra.set(jobIdStr, entry);
+                        }
+
+                        const amount = Number(
+                            (wo as any).totalWriteOffAmount || 0
+                        );
+
+                        entry.writeOffOccasions += 1;
+                        entry.totalWriteOffAmount += amount;
+                        entry.occasionDetails.push({
+                            writeOffId: String(wo._id),
+                            amount,
+                            date: (wo as any).createdAt || null,
+                            reason: (wo as any).reason || '',
+                            logic: (wo as any).logic || '',
+                            by:
+                                ((wo as any).performedBy &&
+                                    (wo as any).performedBy.name) ||
+                                'N/A',
+                        });
+                    }
+
+                    const extraLogsArray = Array.from(groupedExtra.values());
+                    normalizedClient.writeOffLogs = [
+                        ...existingLogs,
+                        ...extraLogsArray,
+                    ];
+                }
+            } catch (err) {
+                console.log(
+                    'Error while enriching client writeOffLogs for no-time-log write-offs:',
+                    err
+                );
+            }
+        }
 
         SUCCESS(res, 200, "Client fetched successfully", { data: normalizedClient, });
     } catch (error) {
@@ -1800,6 +1921,7 @@ const importClients = async (req: Request, res: Response, next: NextFunction): P
                     jobCategories: [],
                     wipBalance: wipBalance || 0,
                     debtorsBalance: debtorsBalance || 0,
+                    isImported: true,
                 };
                 
                 // Only include dates if they're defined (not empty) and not from 1970
@@ -1890,6 +2012,30 @@ const getClientDebtorsLog = async (req: Request, res: Response, next: NextFuncti
         if (!client) {
             throw new BadRequestError("Client not found");
         }
+
+        // Fetch debtors open balance entries
+        const debtorsOpenBalances = await DebtorsOpenBalanceModel.find({ 
+            clientId: clientObjectId, 
+            companyId,
+            status: 'outstanding' // Only include outstanding entries
+        })
+            .select('_id amount type jobId referenceNumber notes createdAt')
+            .sort({ createdAt: 1 })
+            .lean();
+
+        // Get job names for debtors open balances
+        const debtorsOpenBalanceJobIds = debtorsOpenBalances
+            .map(dob => dob.jobId)
+            .filter((id): id is typeof debtorsOpenBalances[0]['jobId'] => Boolean(id));
+
+        const debtorsOpenBalanceJobs = debtorsOpenBalanceJobIds.length > 0
+            ? await JobModel.find({ _id: { $in: debtorsOpenBalanceJobIds } })
+                .select('_id name')
+                .lean()
+            : [];
+
+        const debtorsOpenBalanceJobNameMap = new Map<string, string>();
+        debtorsOpenBalanceJobs.forEach(job => debtorsOpenBalanceJobNameMap.set(job._id.toString(), job.name));
 
         const invoices = await InvoiceModel.find({ clientId: clientObjectId, companyId })
             .select('_id invoiceNo totalAmount date status jobId scope source createdAt')
@@ -2008,6 +2154,34 @@ const getClientDebtorsLog = async (req: Request, res: Response, next: NextFuncti
             }
         }
 
+        // Add debtors open balance entries
+        for (const dob of debtorsOpenBalances) {
+            const dobDate = normalizeDate(dob.createdAt);
+            const dobAmount = currency(Number(dob.amount || 0));
+            const isDebit = dob.type === 'debit' || (dob.type !== 'credit' && dobAmount >= 0);
+            const effectiveAmount = isDebit ? dobAmount : -dobAmount;
+
+            runningBalance += effectiveAmount;
+
+            pushEntry({
+                type: dob.type === 'credit' ? 'Debtors Credit' : dob.type === 'adjustment' ? 'Debtors Adjustment' : 'Debtors Debit',
+                referenceNumber: dob.referenceNumber || 'Manual Entry',
+                docNo: dob.referenceNumber || 'DOB',
+                jobName: dob.jobId ? debtorsOpenBalanceJobNameMap.get(dob.jobId.toString()) : undefined,
+                debit: isDebit ? Math.abs(dobAmount) : 0,
+                credit: !isDebit ? Math.abs(dobAmount) : 0,
+                allocated: 0,
+                outstanding: runningBalance,
+                balance: runningBalance,
+                date: dobDate,
+            });
+
+            // Add to aging if it's a debit (positive balance)
+            if (isDebit && dobAmount > 0) {
+                addToAging(dobAmount, dobDate);
+            }
+        }
+
         for (const invoice of invoices) {
             const invoiceId = invoice?._id?.toString();
             const invoiceDate = invoice.date || invoice.createdAt || new Date();
@@ -2068,9 +2242,39 @@ const getClientDebtorsLog = async (req: Request, res: Response, next: NextFuncti
             }
         }
 
+        // Sort all entries chronologically by date
+        entries.sort((a, b) => {
+            const aDate = normalizeDate(a.date).getTime();
+            const bDate = normalizeDate(b.date).getTime();
+            if (aDate !== bDate) {
+                return aDate - bDate;
+            }
+            // If same date, maintain order: opening balance, debtors open balance, invoices
+            const orderMap: Record<string, number> = {
+                'Opening Balance': 0,
+                'Debtors Debit': 1,
+                'Debtors Credit': 1,
+                'Debtors Adjustment': 1,
+                'Invoice': 2,
+                'Receipt': 3,
+                'Payment Completed': 3,
+                'Write Off': 3,
+                'Credit Note': 3,
+            };
+            return (orderMap[a.type] || 99) - (orderMap[b.type] || 99);
+        });
+
+        // Recalculate running balance after sorting
+        let recalculatedBalance = 0;
+        entries.forEach(entry => {
+            recalculatedBalance += entry.debit - entry.credit;
+            entry.balance = currency(recalculatedBalance);
+            entry.outstanding = currency(Math.max(recalculatedBalance, 0));
+        });
+
         const totalDebit = entries.reduce((sum, entry) => sum + entry.debit, 0);
         const totalCredit = entries.reduce((sum, entry) => sum + entry.credit, 0);
-        const outstandingBalance = Math.max(runningBalance, 0);
+        const outstandingBalance = Math.max(recalculatedBalance, 0);
 
         const summary = {
             totalDebit: currency(totalDebit),
@@ -2101,6 +2305,55 @@ const getClientDebtorsLog = async (req: Request, res: Response, next: NextFuncti
     }
 };
 
+const createDebtorsOpenBalance = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const companyId = req.user.companyId;
+        const { clientId, amount, jobId, type, date, referenceNumber, notes } = req.body;
+
+        if (!clientId) {
+            throw new BadRequestError("Client ID is required");
+        }
+
+        // Verify client exists and belongs to company
+        const client = await ClientModel.findOne({ _id: ObjectId(clientId), companyId });
+        if (!client) {
+            throw new BadRequestError("Client not found");
+        }
+
+        const openBalancePayload: any = {
+            clientId: ObjectId(clientId),
+            amount: Number(amount),
+            type: type || 'debit',
+            companyId: ObjectId(companyId),
+            status: 'outstanding',
+            performedBy: ObjectId(req.userId),
+        };
+
+        if (jobId) {
+            openBalancePayload.jobId = ObjectId(jobId);
+        }
+
+        if (date) {
+            openBalancePayload.createdAt = new Date(date);
+        }
+
+        if (referenceNumber) {
+            openBalancePayload.referenceNumber = referenceNumber;
+        }
+
+        if (notes) {
+            openBalancePayload.notes = notes;
+        }
+
+        const debtorsOpenBalance = await DebtorsOpenBalanceModel.create(openBalancePayload);
+        
+        SUCCESS(res, 200, "Debtors open balance created successfully", { data: debtorsOpenBalance });
+    } catch (error) {
+        console.log("error in createDebtorsOpenBalance", error);
+        next(error);
+    }
+};
+
 export default {
     addClient,
     updateClient,
@@ -2113,4 +2366,5 @@ export default {
     getClientBreakdown,
     importClients,
     getClientDebtorsLog,
+    createDebtorsOpenBalance,
 };

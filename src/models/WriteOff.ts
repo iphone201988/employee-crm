@@ -56,6 +56,8 @@ const WriteOffTimeLogSchema = new Schema(
 );
 const WriteOffSchema = new Schema({
     invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice', required: true },
+    clientId: { type: Schema.Types.ObjectId, ref: 'Client', required: false }, // For write-offs without time logs
+    jobId: { type: Schema.Types.ObjectId, ref: 'Job', required: false }, // For write-offs without time logs
     timeLogs: {
         type: [WriteOffTimeLogSchema],
         required: false, // Allow empty array when no time logs exist
@@ -98,6 +100,8 @@ WriteOffSchema.index({ 'timeLogs.timeLogId': 1 });
 WriteOffSchema.index({ 'timeLogs.clientId': 1, createdAt: -1 });
 WriteOffSchema.index({ 'timeLogs.jobId': 1, createdAt: -1 });
 WriteOffSchema.index({ 'timeLogs.userId': 1, createdAt: -1 });
+WriteOffSchema.index({ clientId: 1, createdAt: -1 }); // For write-offs without time logs
+WriteOffSchema.index({ jobId: 1, createdAt: -1 }); // For write-offs without time logs
 
 WriteOffSchema.pre('save', function (next) {
     if (this.timeLogs && this.timeLogs.length > 0) {

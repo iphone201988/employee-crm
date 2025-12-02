@@ -64,6 +64,8 @@ const createInvoice = async (req: Request, res: Response, next: NextFunction): P
             // Create write-off payload (timeLogs can be empty if no time logs exist)
             const writeOffPayload: any = {
                 invoiceId: newInvoice._id,
+                clientId: ObjectId(clientId), // Store clientId at write-off level for write-offs without time logs
+                jobId: jobId ? ObjectId(jobId) : null, // Store jobId if available, use null instead of undefined
                 timeLogs: hasTimeLogs ? writeOffData.timeLogs.map((log: any) => ({
                     timeLogId: ObjectId(log.timeLogId),
                     writeOffAmount: Number(log.writeOffAmount || 0),
@@ -82,7 +84,7 @@ const createInvoice = async (req: Request, res: Response, next: NextFunction): P
                 totalWriteOffAmount: writeOffAmount,
                 totalOriginalAmount: hasTimeLogs 
                     ? writeOffData.timeLogs.reduce((sum: number, log: any) => sum + Number(log.originalAmount || 0), 0)
-                    : 0,
+                    : writeOffAmount, // Use writeOffAmount as originalAmount when no time logs
                 totalDuration: hasTimeLogs
                     ? writeOffData.timeLogs.reduce((sum: number, log: any) => sum + Number(log.duration || 0), 0)
                     : 0,
@@ -653,6 +655,26 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
             importedDebtorsMatch._id = ObjectId(clientId);
         }
 
+        // Build match conditions for debtors open balance entries
+        const debtorsOpenBalanceMatch: any = {
+            companyId: ObjectId(companyId),
+            status: 'outstanding', // Only include outstanding entries
+        };
+
+        if (clientId) {
+            debtorsOpenBalanceMatch.clientId = ObjectId(clientId);
+        }
+
+        if (startDate || endDate) {
+            debtorsOpenBalanceMatch.createdAt = {};
+            if (startDate) {
+                debtorsOpenBalanceMatch.createdAt.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                debtorsOpenBalanceMatch.createdAt.$lte = new Date(endDate);
+            }
+        }
+
         // Combined match for filtering (used after union)
         const combinedMatchStage: any = { companyId: ObjectId(companyId) };
         if (clientId) {
@@ -691,6 +713,30 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
                                 balance: '$debtorsBalance',
                                 date: { $ifNull: ['$debtorsDate', '$createdAt'] },
                                 source: { $literal: 'imported' },
+                                companyId: '$companyId',
+                            },
+                        },
+                    ],
+                },
+            },
+            // Union with debtors open balance entries
+            {
+                $unionWith: {
+                    coll: 'debtorsopenbalances',
+                    pipeline: [
+                        { $match: debtorsOpenBalanceMatch },
+                        {
+                            $project: {
+                                clientId: '$clientId',
+                                balance: {
+                                    $cond: [
+                                        { $eq: ['$type', 'credit'] },
+                                        { $multiply: ['$amount', -1] }, // Negative for credit
+                                        '$amount' // Positive for debit/adjustment
+                                    ]
+                                },
+                                date: '$createdAt',
+                                source: { $literal: 'debtorsOpenBalance' },
                                 companyId: '$companyId',
                             },
                         },
@@ -827,6 +873,7 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
                     clientId: '$_id',
                     clientRef: '$clientInfo.clientRef',
                     clientName: '$clientInfo.name',
+                    isImported: { $ifNull: ['$clientInfo.isImported', false] },
                     balance: { $round: ['$totalBalance', 2] },
                     days30: { $round: ['$days30', 2] },
                     days60: { $round: ['$days60', 2] },

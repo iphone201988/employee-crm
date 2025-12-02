@@ -59,8 +59,12 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
                         }
                     });
                     if (validClientIds.length > 0) {
+                        const clientObjectIds = validClientIds.map(id => ObjectId(id));
                         matchConditions.push({
-                            'timeLogs.clientId': { $in: validClientIds.map(id => ObjectId(id)) }
+                            $or: [
+                                { 'timeLogs.clientId': { $in: clientObjectIds } },
+                                { 'clientId': { $in: clientObjectIds } } // For write-offs without time logs
+                            ]
                         });
                     }
                 } catch (e) {
@@ -83,8 +87,12 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
                         }
                     });
                     if (validJobIds.length > 0) {
+                        const jobObjectIds = validJobIds.map(id => ObjectId(id));
                         matchConditions.push({
-                            'timeLogs.jobId': { $in: validJobIds.map(id => ObjectId(id)) }
+                            $or: [
+                                { 'timeLogs.jobId': { $in: jobObjectIds } },
+                                { 'jobId': { $in: jobObjectIds } } // For write-offs without time logs
+                            ]
                         });
                     }
                 } catch (e) {
@@ -102,8 +110,8 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
 
         const pipeline: any[] = [
             { $match: query },
-            // Flatten timeLogs
-            { $unwind: '$timeLogs' },
+            // Use preserveNullAndEmptyArrays to include write-offs with empty timeLogs
+            { $unwind: { path: '$timeLogs', preserveNullAndEmptyArrays: true } },
         ];
 
         // Apply filter match conditions if any (after unwind)
@@ -115,13 +123,35 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
             });
         }
 
+        // Add fields to handle write-offs without time logs
+        pipeline.push({
+            $addFields: {
+                // Use timeLogs.clientId if exists, otherwise use top-level clientId
+                effectiveClientId: { $ifNull: ['$timeLogs.clientId', '$clientId'] },
+                effectiveJobId: { $ifNull: ['$timeLogs.jobId', '$jobId'] },
+                // For write-offs without time logs, use totalWriteOffAmount
+                effectiveAmount: { $ifNull: ['$timeLogs.writeOffAmount', '$totalWriteOffAmount'] },
+                effectiveOriginalAmount: { $ifNull: ['$timeLogs.originalAmount', '$totalOriginalAmount'] },
+                effectiveWriteOffPercentage: { 
+                    $ifNull: [
+                        '$timeLogs.writeOffPercentage',
+                        { $cond: [
+                            { $gt: ['$totalOriginalAmount', 0] },
+                            { $multiply: [{ $divide: ['$totalWriteOffAmount', '$totalOriginalAmount'] }, 100] },
+                            0
+                        ]}
+                    ]
+                },
+            }
+        });
+
         // Continue with lookups
         pipeline.push(
-            // Lookup related collections
+            // Lookup related collections - use effectiveClientId and effectiveJobId
             {
                 $lookup: {
                     from: 'clients',
-                    localField: 'timeLogs.clientId',
+                    localField: 'effectiveClientId',
                     foreignField: '_id',
                     as: 'clientDetails',
                     pipeline: [{ $project: { _id: 1, name: 1, clientRef: 1 } }]
@@ -132,7 +162,7 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
             {
                 $lookup: {
                     from: 'jobs',
-                    localField: 'timeLogs.jobId',
+                    localField: 'effectiveJobId',
                     foreignField: '_id',
                     as: 'jobDetails'
                 }
@@ -153,11 +183,29 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
             {
                 $project: {
                     _id: 1,
-                    clientDetails: { $ifNull: ['$clientDetails', 'N/A'] },
-                    jobDetails: { $ifNull: ['$jobDetails', 'N/A'] },
-                    amount: '$timeLogs.writeOffAmount',
-                    originalAmount: '$timeLogs.originalAmount',
-                    writeOffPercentage: '$timeLogs.writeOffPercentage',
+                    clientDetails: { 
+                        $cond: [
+                            { $ne: ['$clientDetails', null] }, // If clientDetails exists, use it
+                            '$clientDetails',
+                            'N/A' // Otherwise use 'N/A'
+                        ]
+                    },
+                    jobDetails: { 
+                        $cond: [
+                            { $ne: ['$jobDetails', null] }, // If jobDetails exists, use it
+                            '$jobDetails',
+                            { // Otherwise, check if this is a write-off without time logs
+                                $cond: [
+                                    { $eq: ['$timeLogs', null] }, // Write-off without time logs
+                                    { _id: null, name: 'Open Balance / Imported WIP' },
+                                    'N/A'
+                                ]
+                            }
+                        ]
+                    },
+                    amount: '$effectiveAmount',
+                    originalAmount: '$effectiveOriginalAmount',
+                    writeOffPercentage: '$effectiveWriteOffPercentage',
                     by: { $ifNull: ['$performedByDetails.name', 'N/A'] },
                     reason: '$reason',
                     logic: '$logic',
@@ -673,6 +721,210 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                 $gte: new Date(startDate as string),
                 $lte: new Date(endDate as string)
             };
+        }
+
+        /**
+         * CLIENT VIEW (special handling to include write-offs without time logs)
+         * --------------------------------------------------------------------
+         * For the client view we need to show:
+         * - Normal write-offs linked to time logs
+         * - Write-offs created for invoices without any time logs
+         *
+         * We therefore:
+         *  - Unwind timeLogs with preserveNullAndEmptyArrays: true
+         *  - Derive effectiveClientId / effectiveJobId / effective amounts
+         *  - Group by client using these effective fields
+         */
+        if ((type as string) === 'client') {
+            const pipeline: any[] = [
+                { $match: query },
+                // Keep documents even when timeLogs is an empty array
+                { $unwind: { path: '$timeLogs', preserveNullAndEmptyArrays: true } },
+                {
+                    $addFields: {
+                        effectiveClientId: { $ifNull: ['$timeLogs.clientId', '$clientId'] },
+                        effectiveJobId: { $ifNull: ['$timeLogs.jobId', '$jobId'] },
+                        effectiveAmount: { $ifNull: ['$timeLogs.writeOffAmount', '$totalWriteOffAmount'] },
+                        effectiveOriginalAmount: { $ifNull: ['$timeLogs.originalAmount', '$totalOriginalAmount'] },
+                    }
+                },
+                // Lookups using effective fields so write-offs without time logs are still resolved
+                {
+                    $lookup: {
+                        from: 'clients',
+                        localField: 'effectiveClientId',
+                        foreignField: '_id',
+                        as: 'clientDetails',
+                        pipeline: [{ $project: { _id: 1, name: 1, clientRef: 1 } }]
+                    }
+                },
+                { $unwind: { path: '$clientDetails', preserveNullAndEmptyArrays: true } },
+                {
+                    $lookup: {
+                        from: 'jobs',
+                        localField: 'effectiveJobId',
+                        foreignField: '_id',
+                        as: 'jobDetails',
+                        pipeline: [{ $project: { _id: 1, name: 1 } }]
+                    }
+                },
+                { $unwind: { path: '$jobDetails', preserveNullAndEmptyArrays: true } },
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: 'performedBy',
+                        foreignField: '_id',
+                        as: 'performedByDetails',
+                        pipeline: [{ $project: { _id: 1, name: 1 } }]
+                    }
+                },
+                { $unwind: { path: '$performedByDetails', preserveNullAndEmptyArrays: true } },
+            ];
+
+            // Optional search by client name
+            if (search) {
+                pipeline.push({
+                    $match: {
+                        'clientDetails.name': { $regex: search as string, $options: 'i' }
+                    }
+                });
+            }
+
+            // Group by client, aggregating both time-log and non-time-log write-offs
+            pipeline.push(
+                {
+                    $group: {
+                        _id: '$clientDetails._id',
+                        clientRef: { $first: '$clientDetails.clientRef' },
+                        name: { $first: '$clientDetails.name' },
+                        totalWriteOffValue: { $sum: '$effectiveAmount' },
+                        totalFees: { $sum: '$effectiveOriginalAmount' },
+                        jobsWithWriteOff: { $addToSet: '$effectiveJobId' },
+                        uniqueJobs: { $addToSet: '$jobDetails' },
+                        uniqueClients: { $addToSet: '$clientDetails' },
+                        occasions: { $sum: 1 },
+                        occasionDetails: {
+                            $addToSet: {
+                                writeOffId: '$_id',
+                                amount: '$effectiveAmount',
+                                date: '$createdAt',
+                                reason: '$reason',
+                                logic: '$logic',
+                                by: '$performedByDetails.name',
+                                clientDetails: '$clientDetails',
+                                jobDetails: '$jobDetails'
+                            }
+                        }
+                    }
+                },
+                {
+                    $addFields: {
+                        jobsWithWriteOffCount: { $size: '$jobsWithWriteOff' },
+                        writeOffPercentage: {
+                            $cond: [
+                                { $gt: ['$totalFees', 0] },
+                                {
+                                    $round: [
+                                        {
+                                            $multiply: [
+                                                { $divide: ['$totalWriteOffValue', '$totalFees'] },
+                                                100
+                                            ]
+                                        },
+                                        1
+                                    ]
+                                },
+                                0
+                            ]
+                        }
+                    }
+                },
+                // Sort & paginate using facet, mirroring the original implementation
+                { $sort: { totalWriteOffValue: -1 } },
+                {
+                    $facet: {
+                        data: [{ $skip: skip }, { $limit: limitNumber }],
+                        totalCount: [{ $count: 'count' }],
+                        dashboardStats: [
+                            {
+                                $group: {
+                                    _id: null,
+                                    totalWriteOffs: { $sum: '$totalWriteOffValue' },
+                                    totalOccasions: { $sum: '$occasions' },
+                                    totalJobs: { $sum: '$jobsWithWriteOffCount' },
+                                    totalFees: { $sum: '$totalFees' }
+                                }
+                            },
+                            {
+                                $project: {
+                                    _id: 0,
+                                    totalWriteOffs: { $round: ['$totalWriteOffs', 2] },
+                                    totalOccasions: 1,
+                                    totalJobs: 1,
+                                    totalFees: { $round: ['$totalFees', 2] },
+                                    avgWriteOffPercentage: {
+                                        $cond: [
+                                            { $gt: ['$totalFees', 0] },
+                                            {
+                                                $round: [
+                                                    {
+                                                        $multiply: [
+                                                            { $divide: ['$totalWriteOffs', '$totalFees'] },
+                                                            100
+                                                        ]
+                                                    },
+                                                    1
+                                                ]
+                                            },
+                                            0
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            );
+
+            const results = await WriteOffModel.aggregate(pipeline);
+
+            const data = results[0]?.data || [];
+            const totalCount = results[0]?.totalCount[0]?.count || 0;
+            const dashboardStats = results[0]?.dashboardStats[0] || {
+                totalWriteOffs: 0,
+                totalOccasions: 0,
+                totalJobs: 0,
+                totalFees: 0,
+                avgWriteOffPercentage: 0
+            };
+
+            const pagination = {
+                currentPage: pageNumber,
+                totalPages: Math.ceil(totalCount / limitNumber),
+                total: totalCount,
+                limit: limitNumber,
+            };
+
+            SUCCESS(res, 200, `Write-offs by ${type} fetched successfully`, {
+                type,
+                summary: {
+                    totalWriteOffs: dashboardStats.totalWriteOffs,
+                    totalOccasions: dashboardStats.totalOccasions,
+                    jobsWithWriteOffs: dashboardStats.totalJobs,
+                    avgWriteOffPercentage: dashboardStats.avgWriteOffPercentage
+                },
+                totals: {
+                    occasions: dashboardStats.totalOccasions,
+                    writeOffValue: dashboardStats.totalWriteOffs,
+                    jobs: dashboardStats.totalJobs,
+                    totalFees: dashboardStats.totalFees,
+                    avgWriteOffPercentage: dashboardStats.avgWriteOffPercentage
+                },
+                data,
+                pagination
+            });
+
+            return;
         }
 
         // Common lookup stages

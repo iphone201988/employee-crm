@@ -57,6 +57,9 @@ const addClientValidation = {
         yearEnd: Joi.string().optional().allow('', null).messages({
             "string.base": "Year end must be a string",
         }),
+        onboardedDate: Joi.date().optional().allow(null).messages({
+            "date.base": "Onboarded date must be a date",
+        }),
         arDate: Joi.date().optional().allow(null).messages({
             "date.base": "AR date must be a date",
         }),
@@ -79,7 +82,7 @@ const updateClientValidation = {
         businessTypeId: Joi.string().optional().messages({
             "string.base": "Business type ID must be a string",
         }),
-        taxNumber: Joi.string().optional().messages({
+        taxNumber: Joi.string().optional().allow('', null, 'N/A').messages({
             "string.base": "Tax number must be a string",
         }),
         croNumber: Joi.string().optional().messages({
@@ -108,7 +111,7 @@ const updateClientValidation = {
         phoneNote: Joi.string().optional().allow("",null).messages({
             "string.base": "Phone note must be a string",
         }),
-        onboardedDate: Joi.date().optional().messages({
+        onboardedDate: Joi.date().optional().allow(null).messages({
             "date.base": "Onboarded date must be a date",
         }),
         amlCompliant: Joi.boolean().optional().messages({
@@ -178,6 +181,37 @@ const updateClientAgingDatesValidation = {
     body: Joi.object({
         importedWipDate: Joi.alternatives().try(Joi.date(), Joi.string()).optional().allow(null, ''),
         debtorsDate: Joi.alternatives().try(Joi.date(), Joi.string()).optional().allow(null, ''),
+        wipBalance: Joi.number().optional().allow(null),
+        debtorsBalance: Joi.number().optional().allow(null),
+    }),
+};
+
+const createDebtorsOpenBalanceValidation = {
+    body: Joi.object({
+        clientId: Joi.string().required().messages({
+            "string.base": "Client ID must be a string",
+            "any.required": "Client ID is required",
+        }),
+        amount: Joi.number().required().messages({
+            "number.base": "Amount must be a number",
+            "any.required": "Amount is required",
+        }),
+        jobId: Joi.string().optional().allow(null, '').messages({
+            "string.base": "Job ID must be a string",
+        }),
+        type: Joi.string().valid('debit', 'credit', 'adjustment').optional().default('debit').messages({
+            "string.base": "Type must be a string",
+            "any.only": "Type must be one of: debit, credit, adjustment",
+        }),
+        date: Joi.date().optional().messages({
+            "date.base": "Date must be a valid date",
+        }),
+        referenceNumber: Joi.string().optional().allow('', null).messages({
+            "string.base": "Reference number must be a string",
+        }),
+        notes: Joi.string().optional().allow('', null).messages({
+            "string.base": "Notes must be a string",
+        }),
     }),
 };
 
@@ -187,4 +221,5 @@ export default {
     updateClientServiceValidation,
     getClientByIdValidation,
     updateClientAgingDatesValidation,
+    createDebtorsOpenBalanceValidation,
 };
