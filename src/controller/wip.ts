@@ -758,6 +758,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                 wipDuration: 1,
                                 wipopenbalances: 1,
                                 wipTotalOpenBalance: 1,
+                                jobTotalWipAmount: 1,
                                 jobWipTraget: 1,
                                 wipBreakdown: 1,
                                 jobFeePercentage: 1,
@@ -1341,8 +1342,10 @@ const wipBalance = async (req: Request, res: Response) => {
             if (endDate) openBalanceMatch.createdAt.$lte = new Date(endDate);
         }
 
+        // Build match conditions for imported WIP (clients with wipBalance - including negative values)
         const importedMatch: any = {
-            companyId: companyObjectId
+            companyId: companyObjectId,
+            wipBalance: { $exists: true, $ne: 0 }, // Include all non-zero wipBalance (positive and negative)
         };
         if (clientObjectId) {
             importedMatch._id = clientObjectId;
@@ -1404,7 +1407,9 @@ const wipBalance = async (req: Request, res: Response) => {
             {
                 $addFields: {
                     daysOld: {
-                        $divide: [{ $subtract: [currentDate, '$date'] }, 1000 * 60 * 60 * 24],
+                        $floor: {
+                            $divide: [{ $subtract: [currentDate, '$date'] }, 1000 * 60 * 60 * 24],
+                        },
                     },
                 },
             },
@@ -1417,6 +1422,12 @@ const wipBalance = async (req: Request, res: Response) => {
                 },
             },
             { $unwind: '$clientInfo' },
+            // Filter out inactive/deleted clients
+            {
+                $match: {
+                    "clientInfo.status": "active"
+                }
+            },
             ...(search
                 ? [
                     {

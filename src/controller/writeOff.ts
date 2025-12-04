@@ -124,8 +124,12 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
         }
 
         // Add fields to handle write-offs without time logs
+        // IMPORTANT: Preserve totalWriteOffAmount before unwinding so we can use it after grouping
         pipeline.push({
             $addFields: {
+                // Preserve the original totalWriteOffAmount before unwinding
+                preservedTotalWriteOffAmount: '$totalWriteOffAmount',
+                preservedTotalOriginalAmount: '$totalOriginalAmount',
                 // Use timeLogs.clientId if exists, otherwise use top-level clientId
                 effectiveClientId: { $ifNull: ['$timeLogs.clientId', '$clientId'] },
                 effectiveJobId: { $ifNull: ['$timeLogs.jobId', '$jobId'] },
@@ -154,10 +158,19 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
                     localField: 'effectiveClientId',
                     foreignField: '_id',
                     as: 'clientDetails',
-                    pipeline: [{ $project: { _id: 1, name: 1, clientRef: 1 } }]
+                    pipeline: [
+                        { $match: { status: "active" } }, // Only lookup active clients
+                        { $project: { _id: 1, name: 1, clientRef: 1 } }
+                    ]
                 }
             },
             { $unwind: { path: '$clientDetails', preserveNullAndEmptyArrays: true } },
+            // Filter out write-offs for inactive/deleted clients - only keep entries with valid active clients
+            {
+                $match: {
+                    "clientDetails": { $exists: true, $ne: null }
+                }
+            },
 
             {
                 $lookup: {
@@ -183,6 +196,9 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
             {
                 $project: {
                     _id: 1,
+                    // Preserve total amounts for correct calculation after grouping
+                    preservedTotalWriteOffAmount: 1,
+                    preservedTotalOriginalAmount: 1,
                     clientDetails: { 
                         $cond: [
                             { $ne: ['$clientDetails', null] }, // If clientDetails exists, use it
@@ -219,8 +235,11 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
                     _id: '$_id',
                     clientDetails: { $first: '$clientDetails' },
                     jobs: { $addToSet: '$jobDetails' },
-                    amount: { $first: '$amount' },
-                    originalAmount: { $first: '$originalAmount' },
+                    // Use preservedTotalWriteOffAmount (correct total from model) instead of summing individual amounts
+                    // This ensures we get the correct total write-off amount even when there are multiple time logs
+                    // preservedTotalWriteOffAmount is set before unwinding, so $first gives us the correct total
+                    amount: { $first: '$preservedTotalWriteOffAmount' },
+                    originalAmount: { $first: '$preservedTotalOriginalAmount' },
                     writeOffPercentage: { $first: '$writeOffPercentage' },
                     by: { $first: '$by' },
                     reason: { $first: '$reason' },
@@ -755,17 +774,26 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         localField: 'effectiveClientId',
                         foreignField: '_id',
                         as: 'clientDetails',
-                        pipeline: [{ $project: { _id: 1, name: 1, clientRef: 1 } }]
+                        pipeline: [
+                            { $match: { status: "active" } }, // Only lookup active clients
+                            { $project: { _id: 1, name: 1, clientRef: 1 } }
+                        ]
                     }
                 },
                 { $unwind: { path: '$clientDetails', preserveNullAndEmptyArrays: true } },
+                // Filter out write-offs for inactive/deleted clients - only keep entries with valid active clients
+                {
+                    $match: {
+                        "clientDetails": { $exists: true, $ne: null }
+                    }
+                },
                 {
                     $lookup: {
                         from: 'jobs',
                         localField: 'effectiveJobId',
                         foreignField: '_id',
                         as: 'jobDetails',
-                        pipeline: [{ $project: { _id: 1, name: 1 } }]
+                        pipeline: [{ $project: { _id: 1, name: 1, jobCost: 1 } }]
                     }
                 },
                 { $unwind: { path: '$jobDetails', preserveNullAndEmptyArrays: true } },
@@ -798,7 +826,7 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         clientRef: { $first: '$clientDetails.clientRef' },
                         name: { $first: '$clientDetails.name' },
                         totalWriteOffValue: { $sum: '$effectiveAmount' },
-                        totalFees: { $sum: '$effectiveOriginalAmount' },
+                        // Store unique jobs with their jobCost for calculating totalFees
                         jobsWithWriteOff: { $addToSet: '$effectiveJobId' },
                         uniqueJobs: { $addToSet: '$jobDetails' },
                         uniqueClients: { $addToSet: '$clientDetails' },
@@ -813,6 +841,26 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                                 by: '$performedByDetails.name',
                                 clientDetails: '$clientDetails',
                                 jobDetails: '$jobDetails'
+                            }
+                        }
+                    }
+                },
+                // Calculate totalFees from unique jobs' jobCost
+                {
+                    $addFields: {
+                        totalFees: {
+                            $sum: {
+                                $map: {
+                                    input: {
+                                        $filter: {
+                                            input: '$uniqueJobs',
+                                            as: 'job',
+                                            cond: { $ne: ['$$job', null] }
+                                        }
+                                    },
+                                    as: 'job',
+                                    in: { $ifNull: ['$$job.jobCost', 0] }
+                                }
                             }
                         }
                     }
@@ -936,10 +984,19 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                     localField: 'timeLogs.clientId',
                     foreignField: '_id',
                     as: 'clientDetails',
-                    pipeline: [{ $project: { _id: 1, name: 1, clientRef: 1 } }]
+                    pipeline: [
+                        { $match: { status: "active" } }, // Only lookup active clients
+                        { $project: { _id: 1, name: 1, clientRef: 1 } }
+                    ]
                 }
             },
             { $unwind: { path: '$clientDetails', preserveNullAndEmptyArrays: true } },
+            // Filter out write-offs for inactive/deleted clients - only keep entries with valid active clients
+            {
+                $match: {
+                    "clientDetails": { $exists: true, $ne: null }
+                }
+            },
 
             // Lookup for job details
             {
@@ -948,7 +1005,7 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                     localField: 'timeLogs.jobId',
                     foreignField: '_id',
                     as: 'jobDetails',
-                    pipeline: [{ $project: { _id: 1, name: 1, } }]
+                    pipeline: [{ $project: { _id: 1, name: 1, jobCost: 1 } }]
                 }
             },
             { $unwind: { path: '$jobDetails', preserveNullAndEmptyArrays: true } },
@@ -1013,7 +1070,6 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         clientRef: { $first: '$clientDetails.clientRef' },
                         name: { $first: '$clientDetails.name' },
                         totalWriteOffValue: { $sum: '$timeLogs.writeOffAmount' },
-                        totalFees: { $sum: '$timeLogs.originalAmount' },
                         jobsWithWriteOff: { $addToSet: '$timeLogs.jobId' },
                         uniqueJobs: { $addToSet: '$jobDetails' },
                         uniqueClients: { $addToSet: '$clientDetails' },
@@ -1036,6 +1092,22 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                 addFieldsStage = {
                     $addFields: {
                         jobsWithWriteOffCount: { $size: '$jobsWithWriteOff' },
+                        // Calculate totalFees from unique jobs' jobCost
+                        totalFees: {
+                            $sum: {
+                                $map: {
+                                    input: {
+                                        $filter: {
+                                            input: '$uniqueJobs',
+                                            as: 'job',
+                                            cond: { $ne: ['$$job', null] }
+                                        }
+                                    },
+                                    as: 'job',
+                                    in: { $ifNull: ['$$job.jobCost', 0] }
+                                }
+                            }
+                        },
                         writeOffPercentage: {
                             $cond: [
                                 { $gt: ['$totalFees', 0] },
@@ -1066,7 +1138,6 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         name: { $first: '$jobDetails.name' },
                         clientDetails: { $first: '$clientDetails' },
                         totalWriteOffValue: { $sum: '$timeLogs.writeOffAmount' },
-                        totalFees: { $sum: '$timeLogs.originalAmount' },
                         uniqueJobs: { $addToSet: '$jobDetails' },
                         uniqueClients: { $addToSet: '$clientDetails' },
                         occasionDetails: {
@@ -1086,6 +1157,22 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
 
                 addFieldsStage = {
                     $addFields: {
+                        // Calculate totalFees from unique jobs' jobCost (should be single job for job view)
+                        totalFees: {
+                            $sum: {
+                                $map: {
+                                    input: {
+                                        $filter: {
+                                            input: '$uniqueJobs',
+                                            as: 'job',
+                                            cond: { $ne: ['$$job', null] }
+                                        }
+                                    },
+                                    as: 'job',
+                                    in: { $ifNull: ['$$job.jobCost', 0] }
+                                }
+                            }
+                        },
                         writeOffPercentage: {
                             $cond: [
                                 { $gt: ['$totalFees', 0] },
@@ -1113,7 +1200,6 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         _id: '$categoryDetails._id',
                         categoryName: { $first: '$categoryDetails.name' },
                         totalWriteOffValue: { $sum: '$timeLogs.writeOffAmount' },
-                        totalFees: { $sum: '$timeLogs.originalAmount' },
                         uniqueJobs: { $addToSet: '$jobDetails' },
                         uniqueClients: { $addToSet: '$clientDetails' },
                         occasionDetails: {
@@ -1134,6 +1220,22 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                 addFieldsStage = {
                     $addFields: {
                         jobsCount: { $size: '$uniqueJobs' },
+                        // Calculate totalFees from unique jobs' jobCost
+                        totalFees: {
+                            $sum: {
+                                $map: {
+                                    input: {
+                                        $filter: {
+                                            input: '$uniqueJobs',
+                                            as: 'job',
+                                            cond: { $ne: ['$$job', null] }
+                                        }
+                                    },
+                                    as: 'job',
+                                    in: { $ifNull: ['$$job.jobCost', 0] }
+                                }
+                            }
+                        },
                         writeOffPercentage: {
                             $cond: [
                                 { $gt: ['$totalFees', 0] },
@@ -1164,7 +1266,6 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         _id: '$teamMemberDetails._id',
                         name: { $first: '$teamMemberDetails.name' },
                         totalWriteOffValue: { $sum: '$timeLogs.writeOffAmount' },
-                        totalFees: { $sum: '$timeLogs.originalAmount' },
                         uniqueClients: { $addToSet: '$clientDetails' },
                         uniqueJobs: { $addToSet: '$jobDetails' },
                         occasionDetails: {
@@ -1186,6 +1287,22 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                     $addFields: {
                         clientsCount: { $size: '$uniqueClients' },
                         jobsCount: { $size: '$uniqueJobs' },
+                        // Calculate totalFees from unique jobs' jobCost
+                        totalFees: {
+                            $sum: {
+                                $map: {
+                                    input: {
+                                        $filter: {
+                                            input: '$uniqueJobs',
+                                            as: 'job',
+                                            cond: { $ne: ['$$job', null] }
+                                        }
+                                    },
+                                    as: 'job',
+                                    in: { $ifNull: ['$$job.jobCost', 0] }
+                                }
+                            }
+                        },
                         writeOffPercentage: {
                             $cond: [
                                 { $gt: ['$totalFees', 0] },

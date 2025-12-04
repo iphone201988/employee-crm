@@ -625,10 +625,10 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
         const pageSize = parseInt(limit, 10);
         const skipCount = (pageNumber - 1) * pageSize;
 
-        // Build match conditions for invoices - only invoices with outstanding balance
+        // Build match conditions for invoices - include all invoices with non-zero balance (including negative)
         const invoiceMatchConditions: any = {
             companyId: ObjectId(companyId),
-            $expr: { $gt: [{ $subtract: ['$totalAmount', '$paidAmount'] }, 0] }, // Only unpaid/partially paid
+            $expr: { $ne: [{ $subtract: ['$totalAmount', '$paidAmount'] }, 0] }, // Include all non-zero balances (positive and negative)
         };
 
         if (clientId) {
@@ -645,10 +645,10 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
             }
         }
 
-        // Build match conditions for imported debtors (clients with debtorsBalance)
+        // Build match conditions for imported debtors (clients with debtorsBalance - including negative values)
         const importedDebtorsMatch: any = {
             companyId: ObjectId(companyId),
-            debtorsBalance: { $gt: 0 }, // Only clients with imported debtors balance
+            debtorsBalance: { $exists: true, $ne: 0 }, // Include all non-zero debtors balance (positive and negative)
         };
 
         if (clientId) {
@@ -865,6 +865,12 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
                     path: '$clientInfo',
                     preserveNullAndEmptyArrays: true,
                 },
+            },
+            // Filter out inactive/deleted clients - only keep entries with active clients
+            {
+                $match: {
+                    "clientInfo.status": "active"
+                }
             },
             // Project final fields
             {
