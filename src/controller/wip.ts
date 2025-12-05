@@ -1261,8 +1261,17 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                     totalInvoicedAmount: {
                         $sum: {
                             $cond: [
-                                { $eq: ['$clientTargetMetCombined', '2'] },
+                                { $eq: ['$clientTargetMet', '2'] },
                                 '$clientTotalWipAmount',
+                                0
+                            ]
+                        }
+                    },
+                    totalInvoicedCount: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$clientTargetMet', '2'] },
+                                1,
                                 0
                             ]
                         }
@@ -1274,7 +1283,9 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
         const summaryData = summary[0] || {
             totalClients: 0,
             totalJobs: 0,
-            totalWipAmount: 0
+            totalWipAmount: 0,
+            totalInvoicedAmount: 0,
+            totalInvoicedCount: 0
         };
 
         SUCCESS(res, 200, "Work in progress data fetched successfully", {
@@ -1650,9 +1661,15 @@ const wipBalance = async (req: Request, res: Response) => {
 const attachWipTarget = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const { clientId, wipTargetId, jobId, type } = req.body;
-        const wipTarget = await WipTragetAmountsModel.findById(wipTargetId);
-        if (!wipTarget) {
-            throw new NotFoundError("WIP target not found");
+        
+        // Allow null/undefined wipTargetId to clear the target
+        const isClearing = !wipTargetId || wipTargetId === null || wipTargetId === undefined;
+        
+        if (!isClearing) {
+            const wipTarget = await WipTragetAmountsModel.findById(wipTargetId);
+            if (!wipTarget) {
+                throw new NotFoundError("WIP target not found");
+            }
         }
 
         switch (type) {
@@ -1662,7 +1679,7 @@ const attachWipTarget = async (req: Request, res: Response, next: NextFunction):
                 const job = await JobModel.findById(jobId);
                 if (!job) throw new NotFoundError("Job not found");
 
-                job.wipTargetId = wipTargetId;
+                job.wipTargetId = isClearing ? undefined : wipTargetId;
                 await job.save();
                 break;
             }
@@ -1673,7 +1690,7 @@ const attachWipTarget = async (req: Request, res: Response, next: NextFunction):
                 const client = await ClientModel.findById(clientId);
                 if (!client) throw new NotFoundError("Client not found");
 
-                client.wipTargetId = wipTargetId;
+                client.wipTargetId = isClearing ? undefined : wipTargetId;
                 await client.save();
                 break;
             }
@@ -1682,7 +1699,13 @@ const attachWipTarget = async (req: Request, res: Response, next: NextFunction):
                 throw new BadRequestError("Invalid type — must be 'job' or 'client'");
         }
 
-        return SUCCESS(res, 200, "WIP target attached successfully", { wipTarget });
+        const message = isClearing 
+            ? "WIP target cleared successfully" 
+            : "WIP target attached successfully";
+        
+        const wipTarget = isClearing ? null : await WipTragetAmountsModel.findById(wipTargetId);
+        
+        return SUCCESS(res, 200, message, { wipTarget });
     } catch (error) {
         console.log("error in addWipTarget", error);
         next(error);
