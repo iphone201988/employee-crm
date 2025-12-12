@@ -523,11 +523,19 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
         // 🧠 Base client match condition
         const baseMatch: any = {
             companyId: new mongoose.Types.ObjectId(companyId),
-            status: 'active'
+            status: 'active',
+            // Exclude clients with name "N/A"
+            name: { $ne: 'N/A' }
         };
         if (req.query.serach) {
             const searchRegex = new RegExp(`^${req.query.serach}`, 'i');
-            baseMatch.name = { $regex: searchRegex };
+            // Combine search regex with N/A exclusion using $and at top level
+            baseMatch.$and = [
+                { name: { $regex: searchRegex } },
+                { name: { $ne: 'N/A' } }
+            ];
+            // Remove the simple name condition since we're using $and
+            delete baseMatch.name;
         }
         // Main pipeline
         const pipeline: any[] = [
@@ -1433,10 +1441,11 @@ const wipBalance = async (req: Request, res: Response) => {
                 },
             },
             { $unwind: '$clientInfo' },
-            // Filter out inactive/deleted clients
+            // Filter out inactive/deleted clients and clients with name "N/A"
             {
                 $match: {
-                    "clientInfo.status": "active"
+                    "clientInfo.status": "active",
+                    "clientInfo.name": { $ne: "N/A" }
                 }
             },
             ...(search
@@ -1712,4 +1721,46 @@ const attachWipTarget = async (req: Request, res: Response, next: NextFunction):
     }
 };
 
-export default { workInProgress, createOpenWipBalance, wipBalance, attachWipTarget };
+const deleteWipOpenBalance = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const companyId = req.user.companyId;
+        const { openBalanceId } = req.params;
+
+        if (!openBalanceId) {
+            throw new BadRequestError("Open balance ID is required");
+        }
+
+        // Convert string ID to ObjectId for query
+        let openBalanceObjectId;
+        try {
+            openBalanceObjectId = new mongoose.Types.ObjectId(openBalanceId);
+        } catch (error) {
+            throw new BadRequestError("Invalid open balance ID format");
+        }
+
+        // Verify the open balance exists and belongs to the company
+        const openBalance = await WipOpenBalanceModel.findOne({ 
+            _id: openBalanceObjectId, 
+            companyId: new mongoose.Types.ObjectId(companyId)
+        });
+
+        if (!openBalance) {
+            throw new BadRequestError("Open balance not found or does not belong to your company");
+        }
+
+        // Check if the open balance has been invoiced
+        if (openBalance.status === 'invoiced' || openBalance.status === 'paid') {
+            throw new BadRequestError("Cannot delete an open balance that has been invoiced");
+        }
+
+        // Delete the open balance
+        await WipOpenBalanceModel.deleteOne({ _id: openBalanceObjectId });
+
+        SUCCESS(res, 200, "Open balance deleted successfully", { data: { id: openBalanceId } });
+    } catch (error) {
+        console.log("error in deleteWipOpenBalance", error);
+        next(error);
+    }
+};
+
+export default { workInProgress, createOpenWipBalance, wipBalance, attachWipTarget, deleteWipOpenBalance };

@@ -321,12 +321,27 @@ const getInvoices = async (req: Request, res: Response, next: NextFunction): Pro
                     localField: 'clientId',
                     foreignField: '_id',
                     as: 'client',
+                    pipeline: [
+                        {
+                            $match: {
+                                status: 'active'
+                            }
+                        },
+                        {
+                            $project: {
+                                _id: 1,
+                                name: 1,
+                                clientRef: 1,
+                                status: 1
+                            }
+                        }
+                    ]
                 },
             },
             {
                 $unwind: {
                     path: '$client',
-                    preserveNullAndEmptyArrays: true,
+                    preserveNullAndEmptyArrays: false, // Exclude invoices without active clients
                 },
             },
             {
@@ -401,12 +416,69 @@ const getInvoices = async (req: Request, res: Response, next: NextFunction): Pro
                 },
             }
         ]);
-        // Get total count for pagination
-        const totalCount = await InvoiceModel.countDocuments(query);
+        // Get total count for pagination (excluding invoices for inactive clients)
+        const countPipeline = [
+            { $match: query },
+            {
+                $lookup: {
+                    from: 'clients',
+                    localField: 'clientId',
+                    foreignField: '_id',
+                    as: 'client',
+                    pipeline: [
+                        {
+                            $match: {
+                                status: 'active'
+                            }
+                        }
+                    ]
+                },
+            },
+            {
+                $unwind: {
+                    path: '$client',
+                    preserveNullAndEmptyArrays: false, // Exclude invoices without active clients
+                },
+            },
+            {
+                $count: 'total'
+            }
+        ];
+        const countResult = await InvoiceModel.aggregate(countPipeline);
+        const totalCount = countResult[0]?.total || 0;
 
         // Calculate summary statistics
         const summaryPipeline = await InvoiceModel.aggregate([
             { $match: query },
+            {
+                $lookup: {
+                    from: 'clients',
+                    localField: 'clientId',
+                    foreignField: '_id',
+                    as: 'client',
+                    pipeline: [
+                        {
+                            $match: {
+                                status: 'active'
+                            }
+                        },
+                        {
+                            $project: {
+                                _id: 1,
+                                name: 1,
+                                clientRef: 1,
+                                status: 1
+                            }
+                        }
+                    ]
+                },
+            },
+            {
+                $unwind: {
+                    path: '$client',
+                    preserveNullAndEmptyArrays: false, // Exclude invoices without active clients
+                },
+            },
             {
                 $group: {
                     _id: null,
@@ -646,9 +718,11 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
         }
 
         // Build match conditions for imported debtors (clients with debtorsBalance - including negative values)
+        // Exclude clients with name "N/A"
         const importedDebtorsMatch: any = {
             companyId: ObjectId(companyId),
             debtorsBalance: { $exists: true, $ne: 0 }, // Include all non-zero debtors balance (positive and negative)
+            name: { $ne: 'N/A' }, // Exclude clients named "N/A"
         };
 
         if (clientId) {
@@ -866,10 +940,11 @@ const getAgedDebtors = async (req: Request, res: Response, next: NextFunction): 
                     preserveNullAndEmptyArrays: true,
                 },
             },
-            // Filter out inactive/deleted clients - only keep entries with active clients
+            // Filter out inactive/deleted clients and clients with name "N/A"
             {
                 $match: {
-                    "clientInfo.status": "active"
+                    "clientInfo.status": "active",
+                    "clientInfo.name": { $ne: "N/A" }
                 }
             },
             // Project final fields

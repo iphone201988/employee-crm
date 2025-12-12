@@ -624,12 +624,17 @@ function buildDynamicPipeline(
                 }),
                 writeOffPercentage: {
                     $cond: [
-                        { $gt: ['$totalFees', 0] },
+                        { $gt: [{ $add: ['$totalFees', '$totalWriteOffValue'] }, 0] },
                         {
                             $round: [
                                 {
                                     $multiply: [
-                                        { $divide: ['$totalWriteOffValue', '$totalFees'] },
+                                        {
+                                            $divide: [
+                                                '$totalWriteOffValue',
+                                                { $add: ['$totalFees', '$totalWriteOffValue'] }
+                                            ]
+                                        },
                                         100
                                     ]
                                 },
@@ -683,12 +688,17 @@ function buildDynamicPipeline(
                             totalFees: { $round: ['$totalFees', 2] },
                             avgWriteOffPercentage: {
                                 $cond: [
-                                    { $gt: ['$totalFees', 0] },
+                                    { $gt: [{ $add: ['$totalFees', '$totalWriteOffs'] }, 0] },
                                     {
                                         $round: [
                                             {
                                                 $multiply: [
-                                                    { $divide: ['$totalWriteOffs', '$totalFees'] },
+                                                    {
+                                                        $divide: [
+                                                            '$totalWriteOffs',
+                                                            { $add: ['$totalFees', '$totalWriteOffs'] }
+                                                        ]
+                                                    },
                                                     100
                                                 ]
                                             },
@@ -742,18 +752,6 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
             };
         }
 
-        /**
-         * CLIENT VIEW (special handling to include write-offs without time logs)
-         * --------------------------------------------------------------------
-         * For the client view we need to show:
-         * - Normal write-offs linked to time logs
-         * - Write-offs created for invoices without any time logs
-         *
-         * We therefore:
-         *  - Unwind timeLogs with preserveNullAndEmptyArrays: true
-         *  - Derive effectiveClientId / effectiveJobId / effective amounts
-         *  - Group by client using these effective fields
-         */
         if ((type as string) === 'client') {
             const pipeline: any[] = [
                 { $match: query },
@@ -807,6 +805,16 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                     }
                 },
                 { $unwind: { path: '$performedByDetails', preserveNullAndEmptyArrays: true } },
+                {
+                    $lookup: {
+                        from: 'invoices',
+                        localField: 'invoiceId',
+                        foreignField: '_id',
+                        as: 'invoiceDetails',
+                        pipeline: [{ $project: { _id: 1, netAmount: 1, totalAmount: 1 } }]
+                    }
+                },
+                { $unwind: { path: '$invoiceDetails', preserveNullAndEmptyArrays: true } },
             ];
 
             // Optional search by client name
@@ -826,10 +834,12 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         clientRef: { $first: '$clientDetails.clientRef' },
                         name: { $first: '$clientDetails.name' },
                         totalWriteOffValue: { $sum: '$effectiveAmount' },
-                        // Store unique jobs with their jobCost for calculating totalFees
+                        // Store unique jobs with their jobCost for calculating totalFees (keeping for backward compatibility)
                         jobsWithWriteOff: { $addToSet: '$effectiveJobId' },
                         uniqueJobs: { $addToSet: '$jobDetails' },
                         uniqueClients: { $addToSet: '$clientDetails' },
+                        // Store unique invoices with their amounts for calculating totalInvoiceAmount
+                        uniqueInvoices: { $addToSet: '$invoiceDetails' },
                         occasions: { $sum: 1 },
                         occasionDetails: {
                             $addToSet: {
@@ -845,9 +855,25 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         }
                     }
                 },
-                // Calculate totalFees from unique jobs' jobCost
+                // Calculate totalInvoiceAmount from unique invoices' netAmount
                 {
                     $addFields: {
+                        totalInvoiceAmount: {
+                            $sum: {
+                                $map: {
+                                    input: {
+                                        $filter: {
+                                            input: '$uniqueInvoices',
+                                            as: 'invoice',
+                                            cond: { $ne: ['$$invoice', null] }
+                                        }
+                                    },
+                                    as: 'invoice',
+                                    in: { $ifNull: ['$$invoice.netAmount', '$$invoice.totalAmount', 0] }
+                                }
+                            }
+                        },
+                        // Keep totalFees for backward compatibility
                         totalFees: {
                             $sum: {
                                 $map: {
@@ -870,12 +896,17 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                         jobsWithWriteOffCount: { $size: '$jobsWithWriteOff' },
                         writeOffPercentage: {
                             $cond: [
-                                { $gt: ['$totalFees', 0] },
+                                { $gt: [{ $add: ['$totalInvoiceAmount', '$totalWriteOffValue'] }, 0] },
                                 {
                                     $round: [
                                         {
                                             $multiply: [
-                                                { $divide: ['$totalWriteOffValue', '$totalFees'] },
+                                                {
+                                                    $divide: [
+                                                        '$totalWriteOffValue',
+                                                        { $add: ['$totalInvoiceAmount', '$totalWriteOffValue'] }
+                                                    ]
+                                                },
                                                 100
                                             ]
                                         },
@@ -900,7 +931,8 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                                     totalWriteOffs: { $sum: '$totalWriteOffValue' },
                                     totalOccasions: { $sum: '$occasions' },
                                     totalJobs: { $sum: '$jobsWithWriteOffCount' },
-                                    totalFees: { $sum: '$totalFees' }
+                                    totalInvoiceAmount: { $sum: '$totalInvoiceAmount' },
+                                    totalFees: { $sum: '$totalFees' } // Keep for backward compatibility
                                 }
                             },
                             {
@@ -909,15 +941,21 @@ const getWriteOffsDashboard = async (req: Request, res: Response, next: NextFunc
                                     totalWriteOffs: { $round: ['$totalWriteOffs', 2] },
                                     totalOccasions: 1,
                                     totalJobs: 1,
-                                    totalFees: { $round: ['$totalFees', 2] },
+                                    totalInvoiceAmount: { $round: ['$totalInvoiceAmount', 2] },
+                                    totalFees: { $round: ['$totalFees', 2] }, // Keep for backward compatibility
                                     avgWriteOffPercentage: {
                                         $cond: [
-                                            { $gt: ['$totalFees', 0] },
+                                            { $gt: [{ $add: ['$totalInvoiceAmount', '$totalWriteOffs'] }, 0] },
                                             {
                                                 $round: [
                                                     {
                                                         $multiply: [
-                                                            { $divide: ['$totalWriteOffs', '$totalFees'] },
+                                                            {
+                                                                $divide: [
+                                                                    '$totalWriteOffs',
+                                                                    { $add: ['$totalInvoiceAmount', '$totalWriteOffs'] }
+                                                                ]
+                                                            },
                                                             100
                                                         ]
                                                     },
