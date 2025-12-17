@@ -182,6 +182,26 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
             },
             { $unwind: { path: '$jobDetails', preserveNullAndEmptyArrays: true } },
 
+            // Lookup invoice to get total invoice amount (fallback to original amounts if missing)
+            {
+                $lookup: {
+                    from: 'invoices',
+                    localField: 'invoiceId',
+                    foreignField: '_id',
+                    as: 'invoiceDetails',
+                    pipeline: [
+                        {
+                            $project: {
+                                _id: 1,
+                                totalAmount: 1,
+                                netAmount: 1,
+                            }
+                        }
+                    ]
+                }
+            },
+            { $unwind: { path: '$invoiceDetails', preserveNullAndEmptyArrays: true } },
+
             {
                 $lookup: {
                     from: 'users',
@@ -221,6 +241,12 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
                     },
                     amount: '$effectiveAmount',
                     originalAmount: '$effectiveOriginalAmount',
+                    totalInvoiceAmount: {
+                        $ifNull: [
+                            '$invoiceDetails.netAmount',
+                            { $ifNull: ['$invoiceDetails.totalAmount', '$preservedTotalOriginalAmount'] }
+                        ]
+                    },
                     writeOffPercentage: '$effectiveWriteOffPercentage',
                     by: { $ifNull: ['$performedByDetails.name', 'N/A'] },
                     reason: '$reason',
@@ -240,6 +266,7 @@ const getWriteOff = async (req: Request, res: Response, next: NextFunction): Pro
                     // preservedTotalWriteOffAmount is set before unwinding, so $first gives us the correct total
                     amount: { $first: '$preservedTotalWriteOffAmount' },
                     originalAmount: { $first: '$preservedTotalOriginalAmount' },
+                    totalInvoiceAmount: { $first: '$totalInvoiceAmount' },
                     writeOffPercentage: { $first: '$writeOffPercentage' },
                     by: { $first: '$by' },
                     reason: { $first: '$reason' },

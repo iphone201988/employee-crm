@@ -13,6 +13,13 @@ const createJob = async (req: Request, res: Response, next: NextFunction): Promi
             req.body.companyId = req.user.companyId;
         }
         req.body.createdBy = req.userId;
+        // Normalize optional fields to avoid ObjectId cast errors
+        if (typeof req.body.jobManagerId === 'string' && req.body.jobManagerId.trim() === '') {
+            delete req.body.jobManagerId;
+        }
+        if (!Array.isArray(req.body.teamMembers) || req.body.teamMembers.length === 0) {
+            req.body.teamMembers = [];
+        }
         await JobModel.create(req.body);
         SUCCESS(res, 200, "Job created successfully", { data: {} });
     } catch (error) {
@@ -679,6 +686,16 @@ const getJobById = async (req: Request, res: Response, next: NextFunction): Prom
 const updateJob = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
         const { jobId } = req.params;
+        // Normalize optional fields to avoid ObjectId cast errors
+        if (typeof req.body.jobManagerId === 'string' && req.body.jobManagerId.trim() === '') {
+            delete req.body.jobManagerId;
+        }
+        if (!Array.isArray(req.body.teamMembers)) {
+            // if sent as empty string/null, drop it so it won't overwrite with invalid type
+            if (req.body.teamMembers === '' || req.body.teamMembers === null) {
+                delete req.body.teamMembers;
+            }
+        }
         await JobModel.findByIdAndUpdate(jobId, req.body, { new: true });
         SUCCESS(res, 200, "Job updated successfully", { data: {} });
     } catch (error) {

@@ -11,6 +11,7 @@ const wipRouter = express.Router();
 
 wipRouter.post("/open-balance", authenticate, wipController.createOpenWipBalance);
 wipRouter.delete("/open-balance/:openBalanceId", authenticate, wipController.deleteWipOpenBalance);
+wipRouter.delete("/imported-wip/:clientId", authenticate, wipController.deleteImportedWipBalance);
 wipRouter.get("/", authenticate, wipController.workInProgress);
 wipRouter.get("/age-wip", authenticate, wipController.wipBalance);
 wipRouter.post("/attach-wip-target", authenticate, wipController.attachWipTarget);

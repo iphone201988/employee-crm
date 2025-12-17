@@ -882,7 +882,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                             '0',
                             {
                                 $cond: [
-                                    { $gt: ['$clientTotalWipAmount', { $ifNull: ['$clientWipTraget.amount', 0] }] },
+                                    { $gte: ['$clientTotalWipAmount', { $ifNull: ['$clientWipTraget.amount', 0] }] },
                                     '2',
                                     '1'
                                 ]
@@ -1143,7 +1143,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                                             '0',
                                             {
                                                 $cond: [
-                                                    { $gt: ['$jobTotalWipAmount', { $ifNull: ['$jobWipTraget.amount', 0] }] },
+                                                    { $gte: ['$jobTotalWipAmount', { $ifNull: ['$jobWipTraget.amount', 0] }] },
                                                     '2',
                                                     '1'
                                                 ]
@@ -1200,7 +1200,7 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
                             '0',
                             {
                                 $cond: [
-                                    { $gt: ['$clientTotalWipAmount', { $ifNull: ['$clientWipTraget.amount', 0] }] },
+                                    { $gte: ['$clientTotalWipAmount', { $ifNull: ['$clientWipTraget.amount', 0] }] },
                                     '2',
                                     '1'
                                 ]
@@ -1303,6 +1303,39 @@ const workInProgress = async (req: Request, res: Response, next: NextFunction): 
         });
     } catch (error) {
         console.log("error in workInProgress", error);
+        next(error);
+    }
+};
+
+/**
+ * Delete/reset imported WIP balance for a client (sets wipBalance to 0 and clears importedWipDate).
+ */
+const deleteImportedWipBalance = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+    try {
+        const { clientId } = req.params;
+        if (!clientId) {
+            throw new BadRequestError("clientId is required");
+        }
+
+        const companyId = req.user.companyId;
+
+        const client = await ClientModel.findOneAndUpdate(
+            { _id: clientId, companyId },
+            {
+                $set: {
+                    wipBalance: 0,
+                    importedWipDate: null
+                }
+            },
+            { new: true }
+        ).lean();
+
+        if (!client) {
+            throw new NotFoundError("Client not found");
+        }
+
+        SUCCESS(res, 200, "Imported WIP deleted successfully", { data: client });
+    } catch (error) {
         next(error);
     }
 };
@@ -1763,4 +1796,4 @@ const deleteWipOpenBalance = async (req: Request, res: Response, next: NextFunct
     }
 };
 
-export default { workInProgress, createOpenWipBalance, wipBalance, attachWipTarget, deleteWipOpenBalance };
+export default { workInProgress, createOpenWipBalance, wipBalance, attachWipTarget, deleteWipOpenBalance, deleteImportedWipBalance };

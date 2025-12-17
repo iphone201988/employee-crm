@@ -17,9 +17,8 @@ const createJobValidation = {
             "string.base": "Job type ID must be a string",
             "any.required": "Job type ID is required",
         }),
-        jobManagerId: Joi.string().required().messages({
+        jobManagerId: Joi.string().allow('', null).optional().messages({
             "string.base": "Job manager ID must be a string",
-            "any.required": "Job manager ID is required",
         }),
         startDate: Joi.date().required().messages({
             "date.base": "Start date must be a date",
@@ -34,10 +33,12 @@ const createJobValidation = {
             "number.min": "Job fee must be 0 or greater",
             "any.required": "Job fee is required",
         }),
-        teamMembers: Joi.array().items(Joi.string()).min(1).required().messages({
+        teamMembers: Joi.alternatives().try(
+            Joi.array().items(Joi.string()),
+            Joi.string().allow('', null),
+            Joi.allow(null)
+        ).optional().messages({
             "array.base": "Team members must be an array",
-            "array.min": "At least one team member is required",
-            "any.required": "Team members are required",
         }),
         status: Joi.string().valid('queued', 'awaitingRecords', 'inProgress', 'withClient', 'forApproval', 'completed').required().messages({
             "string.base": "Status must be a string",
@@ -62,11 +63,15 @@ const updateJobValidation = {
         description: Joi.string().allow('', null).optional(),
         clientId: Joi.string().optional(),
         jobTypeId: Joi.string().optional(),
-        jobManagerId: Joi.string().optional(),
+        jobManagerId: Joi.string().allow('', null).optional(),
         startDate: Joi.date().optional(),
         endDate: Joi.date().optional(),
         jobCost: Joi.number().optional(),
-        teamMembers: Joi.array().items(Joi.string()).optional(),
+        teamMembers: Joi.alternatives().try(
+            Joi.array().items(Joi.string()),
+            Joi.string().allow('', null),
+            Joi.allow(null)
+        ).optional(),
         status: Joi.string().valid('queued', 'awaitingRecords', 'inProgress', 'withClient', 'forApproval', 'completed').optional(),
         priority: Joi.string().valid('high', 'medium', 'low', 'urgent').optional(),
     }),

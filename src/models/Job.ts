@@ -43,7 +43,7 @@ const JobSchema: Schema = new Schema<IJob>(
         jobManagerId: {
             type: Schema.Types.ObjectId,
             ref: 'User',
-            required: true,
+            required: false,
         },
         startDate: {
             type: Date,
