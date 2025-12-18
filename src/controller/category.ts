@@ -188,7 +188,7 @@ const getCategories = async (req: Request, res: Response, next: NextFunction): P
             bussiness.forEach((bussiness: any) => {
                 const bussinessId = bussiness?._id?.toString();
                 bussiness.count = clients.filter((client: any) => {
-                    console.log("client", client?.businessTypeId);
+                    // console.log("client====", client?.businessTypeId);
                     const clientBusinessTypeId = client?.businessTypeId ? client.businessTypeId.toString() : null;
                     if (!clientBusinessTypeId || !bussinessId) {
                         return false;
