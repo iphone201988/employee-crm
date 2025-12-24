@@ -77,7 +77,7 @@ const startServer = async () => {
     const httpsServer = http.createServer(app);
     // const httpsServer = https.createServer(options, app)
     httpsServer.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT} in ${config.env} mode`);
+      console.log(`🚀 Server running on port ${PORT} in production mode`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
