@@ -5,8 +5,12 @@
   "main": "app.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only ./src/app.ts",
+    "dev1": "ts-node-dev --respawn --transpile-only ./src/app.dev1.ts",
+    "test1": "ts-node-dev --respawn --transpile-only ./src/app.test1.ts",
     "build": "tsc",
-    "start": "tsc && node dist/app.js"
+    "start": "tsc && node dist/app.js",
+    "start:dev1": "tsc && node dist/app.dev1.js",
+    "start:test1": "tsc && node dist/app.test1.js"
   },
   "keywords": [],
   "author": "Pardeep singh",
